@@ -1,0 +1,16 @@
+linters:
+  enable-all: true
+  disable:
+    # Deprecated
+    - exportloopref
+    - execinquery
+    - gomnd
+    # Too noisy or irrelevant
+    - exhaustruct
+linters-settings:
+  depguard:
+    rules:
+      main:
+        allow:
+          - $gostd
+          - github.com
