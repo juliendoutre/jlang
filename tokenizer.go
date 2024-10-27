@@ -72,7 +72,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 
 			// If a letter, prepare next iterations to scan an identifier.
-			if unicode.IsLetter(r) || r == '_' {
+			if isLetter(r) {
 				t.state = IdentifierTokenType
 				t.buffer.WriteRune(r)
 
@@ -90,7 +90,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 		// It's content so far is stored in t.buffer.
 		case IdentifierTokenType:
 			// If a letter of digit, add it to the buffer and continue.
-			if unicode.IsLetter(r) || r == '_' || unicode.IsDigit(r) {
+			if isLetter(r) || unicode.IsDigit(r) {
 				t.buffer.WriteRune(r)
 
 				continue
@@ -133,4 +133,8 @@ func (t *Tokenizer) Next() (*Token, error) {
 func (t *Tokenizer) reset() {
 	t.state = UnknownTokenType
 	t.buffer.Reset()
+}
+
+func isLetter(r rune) bool {
+	return unicode.IsLetter(r) || r == '_'
 }
