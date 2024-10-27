@@ -46,24 +46,12 @@ func (t *Tokenizer) Next() (*Token, error) {
 				// If we were not parsing anything already, simply return a nil Token.
 				case UnknownTokenType:
 					return nil, nil
-				// If we were parsing an identifier, we need to return it.
-				case IdentifierTokenType:
+				// If we were parsing an identifier or a literal decimal integer, we need to return it.
+				case IdentifierTokenType, LiteralDecimalIntegerTokenType:
 					// Prepare to reset t.state and t.buffer after we returned the token.
-					defer func() {
-						t.state = UnknownTokenType
-						t.buffer.Reset()
-					}()
+					defer t.reset()
 
-					return &Token{Type: IdentifierTokenType, Value: t.buffer.String()}, nil
-				// If we were parsing an decimal integer, we need to return it.
-				case LiteralDecimalIntegerTokenType:
-					// Prepare to reset t.state and t.buffer after we returned the token.
-					defer func() {
-						t.state = UnknownTokenType
-						t.buffer.Reset()
-					}()
-
-					return &Token{Type: LiteralDecimalIntegerTokenType, Value: t.buffer.String()}, nil
+					return &Token{Type: t.state, Value: t.buffer.String()}, nil
 				// This should never be reached.
 				default:
 					return nil, fmt.Errorf("Tokenizer is in an unsupported state %d", t.state)
@@ -111,10 +99,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a space, we reached the end of the identifier.
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
-				defer func() {
-					t.state = UnknownTokenType
-					t.buffer.Reset()
-				}()
+				defer t.reset()
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
@@ -131,10 +116,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a space, we reached the end of the literal.
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
-				defer func() {
-					t.state = UnknownTokenType
-					t.buffer.Reset()
-				}()
+				defer t.reset()
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
@@ -146,4 +128,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 		// In case the rune did not match any condition for the current state, it's unexpected and we return an error.
 		return nil, fmt.Errorf("unexpected rune %q when parsing a %q", r, t.state)
 	}
+}
+
+func (t *Tokenizer) reset() {
+	t.state = UnknownTokenType
+	t.buffer.Reset()
 }
