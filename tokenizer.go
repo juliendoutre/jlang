@@ -104,7 +104,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 
 			// If a symbol, prepare next iterations to scan a symbol.
-			if isSymbol(r) {
+			if isSymbol(string(r)) {
 				t.state = SymbolTokenType
 				t.buffer.WriteRune(r)
 
@@ -129,13 +129,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 
 			// If a symbol, we reached the end of the identifier.
-			if isSymbol(r) {
+			if isSymbol(string(r)) {
 				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
-				defer func() {
-					t.state = SymbolTokenType
-					t.buffer.Reset()
-					t.buffer.WriteRune(r)
-				}()
+				defer t.set(SymbolTokenType, r)
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
@@ -158,13 +154,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 
 			// If a symbol, we reached the end of the literal.
-			if isSymbol(r) {
+			if isSymbol(string(r)) {
 				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
-				defer func() {
-					t.state = SymbolTokenType
-					t.buffer.Reset()
-					t.buffer.WriteRune(r)
-				}()
+				defer t.set(SymbolTokenType, r)
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
@@ -180,11 +172,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a letter, we reached the end of the symbol.
 			if isLetter(r) {
 				// Prepare to set t.state and t.buffer to an identifier in the next iteration.
-				defer func() {
-					t.state = IdentifierTokenType
-					t.buffer.Reset()
-					t.buffer.WriteRune(r)
-				}()
+				defer t.set(IdentifierTokenType, r)
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
@@ -192,22 +180,23 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a digit, we reached the end of the symbol.
 			if unicode.IsDigit(r) {
 				// Prepare to set t.state and t.buffer to a literal decimal integer in the next iteration.
-				defer func() {
-					t.state = LiteralDecimalIntegerTokenType
-					t.buffer.Reset()
-					t.buffer.WriteRune(r)
-				}()
+				defer t.set(LiteralDecimalIntegerTokenType, r)
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
 
-			// If another symbol, we reached the end of the symbol.
-			if isSymbol(r) {
-				// Prepare to set t.state and t.buffer to a symbol in the next iteration.
-				defer func() {
-					t.buffer.Reset()
+			// If another symbol:
+			if isSymbol(string(r)) {
+				// If extending the current buffer with the rune matches a valid symbol, add the rune to the buffer.
+				if isSymbol(t.buffer.String() + string(r)) {
 					t.buffer.WriteRune(r)
-				}()
+
+					continue
+				}
+
+				// Else we reached the end of the symbol.
+				// Prepare to set t.state and t.buffer to a symbol in the next iteration.
+				defer t.set(SymbolTokenType, r)
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
@@ -226,40 +215,49 @@ func (t *Tokenizer) reset() {
 	t.buffer.Reset()
 }
 
+func (t *Tokenizer) set(state TokenType, r rune) {
+	t.state = state
+	t.buffer.Reset()
+	t.buffer.WriteRune(r)
+}
+
 func isLetter(r rune) bool {
 	return unicode.IsLetter(r) || r == '_'
 }
 
-func isSymbol(r rune) bool {
+func isSymbol(r string) bool {
 	_, ok := symbols[r]
 	return ok
 }
 
-var symbols = map[rune]struct{}{
+var symbols = map[string]struct{}{
 	// Arithmetic
-	'+': {},
-	'-': {},
-	'*': {},
-	'/': {},
-	'%': {},
-	'>': {},
-	'<': {},
+	"+":  {},
+	"-":  {},
+	"*":  {},
+	"/":  {},
+	"%":  {},
+	">":  {},
+	">=": {},
+	"<":  {},
+	"<=": {},
 	// Logic
-	'&': {},
-	'|': {},
-	'!': {},
-	'^': {},
+	"&": {},
+	"|": {},
+	"!": {},
+	"^": {},
 	// Assignement
-	'=': {},
+	"=":  {},
+	"->": {},
 	// Punctuation
-	'.': {},
-	',': {},
-	':': {},
+	".": {},
+	",": {},
+	":": {},
 	// Grouping
-	'{': {},
-	'}': {},
-	'(': {},
-	')': {},
-	'[': {},
-	']': {},
+	"{": {},
+	"}": {},
+	"(": {},
+	")": {},
+	"[": {},
+	"]": {},
 }
