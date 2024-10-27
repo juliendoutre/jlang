@@ -15,6 +15,7 @@ const (
 	IdentifierTokenType
 	LiteralDecimalIntegerTokenType
 	SymbolTokenType
+	CommentTokenType
 )
 
 func (t TokenType) String() string {
@@ -27,6 +28,8 @@ func (t TokenType) String() string {
 		return "literal decimal integer token"
 	case SymbolTokenType:
 		return "symbol token"
+	case CommentTokenType:
+		return "comment token"
 	default:
 		return "unknown token"
 	}
@@ -63,14 +66,14 @@ func (t *Tokenizer) Next() (*Token, error) {
 				case UndefinedTokenType:
 					return nil, nil
 				// If we were parsing something, we need to return it.
-				case IdentifierTokenType, LiteralDecimalIntegerTokenType, SymbolTokenType:
+				case IdentifierTokenType, LiteralDecimalIntegerTokenType, SymbolTokenType, CommentTokenType:
 					// Prepare to reset t.state and t.buffer after we returned the token.
 					defer t.reset()
 
 					return &Token{Type: t.state, Value: t.buffer.String()}, nil
 				// This should never be reached.
 				default:
-					return nil, fmt.Errorf("Tokenizer is in an unsupported state %d", t.state)
+					return nil, fmt.Errorf("unsupported state %d", t.state)
 				}
 			}
 
@@ -160,6 +163,8 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
+		// Tokenizer started parsing a symbol in previous iterations of the loop.
+		// It's content so far is stored in t.buffer.
 		case SymbolTokenType:
 			// If a space, we reached the end of the symbol.
 			if unicode.IsSpace(r) {
@@ -191,6 +196,11 @@ func (t *Tokenizer) Next() (*Token, error) {
 				if isSymbol(t.buffer.String() + string(r)) {
 					t.buffer.WriteRune(r)
 
+					// If the current symbol indicates the start of a comment, we set the state accordingly for next iterations.
+					if t.buffer.String() == "//" {
+						t.state = CommentTokenType
+					}
+
 					continue
 				}
 
@@ -200,9 +210,26 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
+		// Tokenizer started parsing a comment in previous iterations of the loop.
+		// It's content so far is stored in t.buffer.
+		case CommentTokenType:
+			// Comments end when a new line is started.
+			if r == '\n' {
+				// Prepare to reset t.state and t.buffer after we returned the token.
+				defer t.reset()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
+
+			// Any other printable character is considered part of the comment.
+			if unicode.IsPrint(r) {
+				t.buffer.WriteRune(r)
+
+				continue
+			}
 		// This should never be reached.
 		default:
-			return nil, fmt.Errorf("Tokenizer is in an unsupported state %d", t.state)
+			return nil, fmt.Errorf("unsupported state %d", t.state)
 		}
 
 		// In case the rune did not match any condition for the current state, it's unexpected and we return an error.
@@ -260,4 +287,6 @@ var symbols = map[string]struct{}{
 	")": {},
 	"[": {},
 	"]": {},
+	// Comments
+	"//": {},
 }
