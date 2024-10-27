@@ -11,27 +11,36 @@ import (
 func TestTokenizer(t *testing.T) {
 	t.Parallel()
 
-	testCases := []string{
-		"Hello World",
-		"Hello World this is a more complicated sentence",
+	testCases := map[string][]*jlang.Token{
+		"": {},
+		"Hello": {
+			{Type: jlang.IdentifierTokenType, Value: "Hello"},
+		},
+		"Hello World": {
+			{Type: jlang.IdentifierTokenType, Value: "Hello"},
+			{Type: jlang.IdentifierTokenType, Value: "World"},
+		},
+		"0": {
+			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "0"},
+		},
+		"1279": {
+			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "1279"},
+		},
+		"0 Hello World 1279": {
+			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "0"},
+			{Type: jlang.IdentifierTokenType, Value: "Hello"},
+			{Type: jlang.IdentifierTokenType, Value: "World"},
+			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "1279"},
+		},
 	}
 
-	for _, testCase := range testCases {
+	for testCase, expectedTokens := range testCases {
 		t.Run(testCase, func(t *testing.T) {
 			t.Parallel()
 
 			tokenizer := jlang.NewTokenizer(strings.NewReader(testCase))
-			tokens, err := consumeAllTokens(t, tokenizer)
+			actualTokens, err := consumeAllTokens(t, tokenizer)
 			require.NoError(t, err)
-
-			actualTokens := []string{}
-
-			for _, token := range tokens {
-				require.Equal(t, jlang.IdentifierTokenType, token.Type)
-				actualTokens = append(actualTokens, token.Value)
-			}
-
-			expectedTokens := strings.Fields(testCase)
 			require.Equal(t, expectedTokens, actualTokens)
 		})
 	}

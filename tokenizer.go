@@ -13,6 +13,7 @@ type TokenType uint
 const (
 	UnknownTokenType TokenType = iota
 	IdentifierTokenType
+	LiteralDecimalIntegerTokenType
 )
 
 type Token struct {
@@ -54,6 +55,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 					}()
 
 					return &Token{Type: IdentifierTokenType, Value: t.buffer.String()}, nil
+				// If we were parsing an decimal integer, we need to return it.
+				case LiteralDecimalIntegerTokenType:
+					// Prepare to reset t.state and t.buffer after we returned the token.
+					defer func() {
+						t.state = UnknownTokenType
+						t.buffer.Reset()
+					}()
+
+					return &Token{Type: LiteralDecimalIntegerTokenType, Value: t.buffer.String()}, nil
 				// This should never be reached.
 				default:
 					return nil, fmt.Errorf("Tokenizer is in an unsupported state %d", t.state)
@@ -81,6 +91,13 @@ func (t *Tokenizer) Next() (*Token, error) {
 				continue
 			}
 
+			// If a digit, prepare next iterations to scan a literal decimal integer.
+			if unicode.IsDigit(r) {
+				t.state = LiteralDecimalIntegerTokenType
+				t.buffer.WriteRune(r)
+
+				continue
+			}
 		// Tokenizer started parsing an identifier token in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
 		case IdentifierTokenType:
@@ -92,6 +109,26 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 
 			// If a space, we reached the end of the identifier.
+			if unicode.IsSpace(r) {
+				// Prepare to reset t.state and t.buffer after we returned the token.
+				defer func() {
+					t.state = UnknownTokenType
+					t.buffer.Reset()
+				}()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
+		// Tokenizer started parsing a literal decimal integer token in previous iterations of the loop.
+		// It's content so far is stored in t.buffer.
+		case LiteralDecimalIntegerTokenType:
+			// If a digit, add it to the buffer and continue.
+			if unicode.IsDigit(r) {
+				t.buffer.WriteRune(r)
+
+				continue
+			}
+
+			// If a space, we reached the end of the literal.
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
 				defer func() {
