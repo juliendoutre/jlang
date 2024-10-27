@@ -11,10 +11,26 @@ import (
 type TokenType uint
 
 const (
-	UnknownTokenType TokenType = iota
+	UndefinedTokenType TokenType = iota
 	IdentifierTokenType
 	LiteralDecimalIntegerTokenType
+	SymbolTokenType
 )
+
+func (t TokenType) String() string {
+	switch t {
+	case UndefinedTokenType:
+		return "undefined token"
+	case IdentifierTokenType:
+		return "identifier token"
+	case LiteralDecimalIntegerTokenType:
+		return "literal decimal integer token"
+	case SymbolTokenType:
+		return "symbol token"
+	default:
+		return "unknown token"
+	}
+}
 
 type Token struct {
 	Type  TokenType
@@ -25,12 +41,12 @@ func NewTokenizer(reader io.RuneScanner) *Tokenizer {
 	return &Tokenizer{
 		reader: reader,
 		buffer: bytes.Buffer{},
-		state:  UnknownTokenType,
+		state:  UndefinedTokenType,
 	}
 }
 
 type Tokenizer struct {
-	reader io.RuneScanner
+	reader io.RuneReader
 	buffer bytes.Buffer
 	state  TokenType
 }
@@ -44,10 +60,10 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if errors.Is(err, io.EOF) {
 				switch t.state {
 				// If we were not parsing anything already, simply return a nil Token.
-				case UnknownTokenType:
+				case UndefinedTokenType:
 					return nil, nil
-				// If we were parsing an identifier or a literal decimal integer, we need to return it.
-				case IdentifierTokenType, LiteralDecimalIntegerTokenType:
+				// If we were parsing something, we need to return it.
+				case IdentifierTokenType, LiteralDecimalIntegerTokenType, SymbolTokenType:
 					// Prepare to reset t.state and t.buffer after we returned the token.
 					defer t.reset()
 
@@ -65,7 +81,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 		switch t.state {
 		// Tokenizer is not parsing a contiguous token (typically the first iteration of the loop).
 		// t.buffer should be empty at this point.
-		case UnknownTokenType:
+		case UndefinedTokenType:
 			// Skip any space.
 			if unicode.IsSpace(r) {
 				continue
@@ -82,6 +98,14 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a digit, prepare next iterations to scan a literal decimal integer.
 			if unicode.IsDigit(r) {
 				t.state = LiteralDecimalIntegerTokenType
+				t.buffer.WriteRune(r)
+
+				continue
+			}
+
+			// If a symbol, prepare next iterations to scan a symbol.
+			if isSymbol(r) {
+				t.state = SymbolTokenType
 				t.buffer.WriteRune(r)
 
 				continue
@@ -103,6 +127,18 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
+
+			// If a symbol, we reached the end of the identifier.
+			if isSymbol(r) {
+				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
+				defer func() {
+					t.state = SymbolTokenType
+					t.buffer.Reset()
+					t.buffer.WriteRune(r)
+				}()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
 		// Tokenizer started parsing a literal decimal integer token in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
 		case LiteralDecimalIntegerTokenType:
@@ -120,6 +156,61 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 				return &Token{Type: t.state, Value: t.buffer.String()}, nil
 			}
+
+			// If a symbol, we reached the end of the literal.
+			if isSymbol(r) {
+				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
+				defer func() {
+					t.state = SymbolTokenType
+					t.buffer.Reset()
+					t.buffer.WriteRune(r)
+				}()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
+		case SymbolTokenType:
+			// If a space, we reached the end of the symbol.
+			if unicode.IsSpace(r) {
+				// Prepare to reset t.state and t.buffer after we returned the token.
+				defer t.reset()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
+
+			// If a letter, we reached the end of the symbol.
+			if isLetter(r) {
+				// Prepare to set t.state and t.buffer to an identifier in the next iteration.
+				defer func() {
+					t.state = IdentifierTokenType
+					t.buffer.Reset()
+					t.buffer.WriteRune(r)
+				}()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
+
+			// If a digit, we reached the end of the symbol.
+			if unicode.IsDigit(r) {
+				// Prepare to set t.state and t.buffer to a literal decimal integer in the next iteration.
+				defer func() {
+					t.state = LiteralDecimalIntegerTokenType
+					t.buffer.Reset()
+					t.buffer.WriteRune(r)
+				}()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
+
+			// If another symbol, we reached the end of the symbol.
+			if isSymbol(r) {
+				// Prepare to set t.state and t.buffer to a symbol in the next iteration.
+				defer func() {
+					t.buffer.Reset()
+					t.buffer.WriteRune(r)
+				}()
+
+				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+			}
 		// This should never be reached.
 		default:
 			return nil, fmt.Errorf("Tokenizer is in an unsupported state %d", t.state)
@@ -131,10 +222,44 @@ func (t *Tokenizer) Next() (*Token, error) {
 }
 
 func (t *Tokenizer) reset() {
-	t.state = UnknownTokenType
+	t.state = UndefinedTokenType
 	t.buffer.Reset()
 }
 
 func isLetter(r rune) bool {
 	return unicode.IsLetter(r) || r == '_'
+}
+
+func isSymbol(r rune) bool {
+	_, ok := symbols[r]
+	return ok
+}
+
+var symbols = map[rune]struct{}{
+	// Arithmetic
+	'+': {},
+	'-': {},
+	'*': {},
+	'/': {},
+	'%': {},
+	'>': {},
+	'<': {},
+	// Logic
+	'&': {},
+	'|': {},
+	'!': {},
+	'^': {},
+	// Assignement
+	'=': {},
+	// Punctuation
+	'.': {},
+	',': {},
+	':': {},
+	// Grouping
+	'{': {},
+	'}': {},
+	'(': {},
+	')': {},
+	'[': {},
+	']': {},
 }

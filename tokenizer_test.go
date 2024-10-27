@@ -32,6 +32,19 @@ func TestTokenizer(t *testing.T) {
 			{Type: jlang.IdentifierTokenType, Value: "World"},
 			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "1279"},
 		},
+		"0 > 1 & { test.value }::": {
+			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "0"},
+			{Type: jlang.SymbolTokenType, Value: ">"},
+			{Type: jlang.LiteralDecimalIntegerTokenType, Value: "1"},
+			{Type: jlang.SymbolTokenType, Value: "&"},
+			{Type: jlang.SymbolTokenType, Value: "{"},
+			{Type: jlang.IdentifierTokenType, Value: "test"},
+			{Type: jlang.SymbolTokenType, Value: "."},
+			{Type: jlang.IdentifierTokenType, Value: "value"},
+			{Type: jlang.SymbolTokenType, Value: "}"},
+			{Type: jlang.SymbolTokenType, Value: ":"},
+			{Type: jlang.SymbolTokenType, Value: ":"},
+		},
 	}
 
 	for testCase, expectedTokens := range testCases {
