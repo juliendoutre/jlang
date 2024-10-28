@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"unicode"
+	"unicode/utf8"
 )
 
 type TokenType uint
@@ -36,8 +37,13 @@ func (t TokenType) String() string {
 }
 
 type Token struct {
-	Type  TokenType
-	Value string
+	Type       TokenType
+	Value      string
+	Start, End Location
+}
+
+type Location struct {
+	Line, Column uint
 }
 
 func NewTokenizer(reader io.RuneScanner) *Tokenizer {
@@ -52,6 +58,7 @@ type Tokenizer struct {
 	reader io.RuneReader
 	buffer bytes.Buffer
 	state  TokenType
+	cursor Location
 }
 
 func (t *Tokenizer) Next() (*Token, error) {
@@ -69,8 +76,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 				case IdentifierTokenType, LiteralDecimalIntegerTokenType, SymbolTokenType, CommentTokenType:
 					// Prepare to reset t.state and t.buffer after we returned the token.
 					defer t.reset()
+					defer t.increment(r)
 
-					return &Token{Type: t.state, Value: t.buffer.String()}, nil
+					return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 				// This should never be reached.
 				default:
 					return nil, fmt.Errorf("unsupported state %d", t.state)
@@ -87,6 +95,8 @@ func (t *Tokenizer) Next() (*Token, error) {
 		case UndefinedTokenType:
 			// Skip any space.
 			if unicode.IsSpace(r) {
+				t.increment(r)
+
 				continue
 			}
 
@@ -94,6 +104,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if isLetter(r) {
 				t.state = IdentifierTokenType
 				t.buffer.WriteRune(r)
+				t.increment(r)
 
 				continue
 			}
@@ -102,6 +113,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if unicode.IsDigit(r) {
 				t.state = LiteralDecimalIntegerTokenType
 				t.buffer.WriteRune(r)
+				t.increment(r)
 
 				continue
 			}
@@ -110,6 +122,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if isSymbol(string(r)) {
 				t.state = SymbolTokenType
 				t.buffer.WriteRune(r)
+				t.increment(r)
 
 				continue
 			}
@@ -119,6 +132,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a letter of digit, add it to the buffer and continue.
 			if isLetter(r) || unicode.IsDigit(r) {
 				t.buffer.WriteRune(r)
+				t.increment(r)
 
 				continue
 			}
@@ -127,16 +141,18 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
 				defer t.reset()
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 
 			// If a symbol, we reached the end of the identifier.
 			if isSymbol(string(r)) {
 				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
 				defer t.set(SymbolTokenType, r)
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 		// Tokenizer started parsing a literal decimal integer token in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
@@ -144,6 +160,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 			// If a digit, add it to the buffer and continue.
 			if unicode.IsDigit(r) {
 				t.buffer.WriteRune(r)
+				t.increment(r)
 
 				continue
 			}
@@ -152,16 +169,18 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
 				defer t.reset()
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 
 			// If a symbol, we reached the end of the literal.
 			if isSymbol(string(r)) {
 				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
 				defer t.set(SymbolTokenType, r)
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 		// Tokenizer started parsing a symbol in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
@@ -170,24 +189,27 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
 				defer t.reset()
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 
 			// If a letter, we reached the end of the symbol.
 			if isLetter(r) {
 				// Prepare to set t.state and t.buffer to an identifier in the next iteration.
 				defer t.set(IdentifierTokenType, r)
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 
 			// If a digit, we reached the end of the symbol.
 			if unicode.IsDigit(r) {
 				// Prepare to set t.state and t.buffer to a literal decimal integer in the next iteration.
 				defer t.set(LiteralDecimalIntegerTokenType, r)
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 
 			// If another symbol:
@@ -195,6 +217,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				// If extending the current buffer with the rune matches a valid symbol, add the rune to the buffer.
 				if isSymbol(t.buffer.String() + string(r)) {
 					t.buffer.WriteRune(r)
+					t.increment(r)
 
 					// If the current symbol indicates the start of a comment, we set the state accordingly for next iterations.
 					if t.buffer.String() == "//" {
@@ -207,8 +230,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 				// Else we reached the end of the symbol.
 				// Prepare to set t.state and t.buffer to a symbol in the next iteration.
 				defer t.set(SymbolTokenType, r)
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 		// Tokenizer started parsing a comment in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
@@ -217,13 +241,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if r == '\n' {
 				// Prepare to reset t.state and t.buffer after we returned the token.
 				defer t.reset()
+				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String()}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
 
 			// Any other printable character is considered part of the comment.
 			if unicode.IsPrint(r) {
 				t.buffer.WriteRune(r)
+				t.increment(r)
 
 				continue
 			}
@@ -254,7 +280,24 @@ func isLetter(r rune) bool {
 
 func isSymbol(r string) bool {
 	_, ok := symbols[r]
+
 	return ok
+}
+
+func (t *Tokenizer) increment(r rune) {
+	if r == '\n' {
+		t.cursor.Line += 1
+		t.cursor.Column = 0
+	} else {
+		t.cursor.Column += 1
+	}
+}
+
+func (t *Tokenizer) getStart() Location {
+	return Location{
+		Line:   t.cursor.Line,
+		Column: t.cursor.Column - uint(utf8.RuneCount(t.buffer.Bytes())),
+	}
 }
 
 var symbols = map[string]struct{}{
