@@ -2,6 +2,7 @@ package jlang_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -117,12 +118,11 @@ func consumeAllTokens(t *testing.T, tokenizer *jlang.Tokenizer) ([]*jlang.Token,
 	for {
 		token, err := tokenizer.Next()
 		if err != nil {
-
 			if errors.Is(err, io.EOF) {
 				return tokens, nil
 			}
 
-			return nil, err
+			return nil, fmt.Errorf("failed getting next token: %w", err)
 		}
 
 		tokens = append(tokens, token)

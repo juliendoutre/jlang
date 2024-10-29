@@ -51,6 +51,10 @@ func NewTokenizer(reader io.RuneScanner) *Tokenizer {
 		reader: reader,
 		buffer: bytes.Buffer{},
 		state:  UndefinedTokenType,
+		cursor: Location{
+			Column: 0,
+			Line:   0,
+		},
 	}
 }
 
@@ -286,10 +290,10 @@ func isSymbol(r string) bool {
 
 func (t *Tokenizer) increment(r rune) {
 	if r == '\n' {
-		t.cursor.Line += 1
+		t.cursor.Line++
 		t.cursor.Column = 0
 	} else {
-		t.cursor.Column += 1
+		t.cursor.Column++
 	}
 }
 

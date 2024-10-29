@@ -6,7 +6,10 @@ linters:
     - execinquery
     - gomnd
     # Too noisy or irrelevant
-    - exhaustruct
+    - lll
+    - funlen
+    - gocognit
+    - cyclop
 linters-settings:
   depguard:
     rules:
@@ -14,3 +17,4 @@ linters-settings:
         allow:
           - $gostd
           - github.com
+          - gopkg.in
