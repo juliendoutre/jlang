@@ -14,7 +14,7 @@ type TokenType uint
 const (
 	UndefinedTokenType TokenType = iota
 	IdentifierTokenType
-	LiteralDecimalIntegerTokenType
+	LiteralIntegerTokenType
 	SymbolTokenType
 	CommentTokenType
 )
@@ -25,8 +25,8 @@ func (t TokenType) String() string {
 		return "undefined token"
 	case IdentifierTokenType:
 		return "identifier token"
-	case LiteralDecimalIntegerTokenType:
-		return "literal decimal integer token"
+	case LiteralIntegerTokenType:
+		return "literal integer token"
 	case SymbolTokenType:
 		return "symbol token"
 	case CommentTokenType:
@@ -71,9 +71,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 				switch t.state {
 				// If we were not parsing anything already, simply return a nil Token.
 				case UndefinedTokenType:
-					return nil, nil
+					return nil, io.EOF
 				// If we were parsing something, we need to return it.
-				case IdentifierTokenType, LiteralDecimalIntegerTokenType, SymbolTokenType, CommentTokenType:
+				case IdentifierTokenType, LiteralIntegerTokenType, SymbolTokenType, CommentTokenType:
 					// Prepare to reset t.state and t.buffer after we returned the token.
 					defer t.reset()
 					defer t.increment(r)
@@ -109,9 +109,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 				continue
 			}
 
-			// If a digit, prepare next iterations to scan a literal decimal integer.
+			// If a digit, prepare next iterations to scan a literal integer.
 			if unicode.IsDigit(r) {
-				t.state = LiteralDecimalIntegerTokenType
+				t.state = LiteralIntegerTokenType
 				t.buffer.WriteRune(r)
 				t.increment(r)
 
@@ -154,9 +154,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 			}
-		// Tokenizer started parsing a literal decimal integer token in previous iterations of the loop.
+		// Tokenizer started parsing a literal integer token in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
-		case LiteralDecimalIntegerTokenType:
+		case LiteralIntegerTokenType:
 			// If a digit, add it to the buffer and continue.
 			if unicode.IsDigit(r) {
 				t.buffer.WriteRune(r)
@@ -205,8 +205,8 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 			// If a digit, we reached the end of the symbol.
 			if unicode.IsDigit(r) {
-				// Prepare to set t.state and t.buffer to a literal decimal integer in the next iteration.
-				defer t.set(LiteralDecimalIntegerTokenType, r)
+				// Prepare to set t.state and t.buffer to a literal integer in the next iteration.
+				defer t.set(LiteralIntegerTokenType, r)
 				defer t.increment(r)
 
 				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
@@ -320,9 +320,10 @@ var symbols = map[string]struct{}{
 	"=":  {},
 	"->": {},
 	// Punctuation
-	".": {},
-	",": {},
-	":": {},
+	".":   {},
+	",":   {},
+	":":   {},
+	"...": {},
 	// Grouping
 	"{": {},
 	"}": {},
