@@ -9,6 +9,23 @@ import (
 	"unicode/utf8"
 )
 
+type InvalidTokenizerStateError struct {
+	state TokenType
+}
+
+func (i *InvalidTokenizerStateError) Error() string {
+	return fmt.Sprintf("Tokenizer reached an invalid state %s", i.state)
+}
+
+type UnexpectedRuneError struct {
+	state TokenType
+	r     rune
+}
+
+func (u *UnexpectedRuneError) Error() string {
+	return fmt.Sprintf("read an unexpected rune %q while parsing a %s", u.r, u.state)
+}
+
 type TokenType uint
 
 const (
@@ -85,7 +102,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 					return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
 				// This should never be reached.
 				default:
-					return nil, fmt.Errorf("unsupported state %d", t.state)
+					return nil, &InvalidTokenizerStateError{state: t.state}
 				}
 			}
 
@@ -259,11 +276,11 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 		// This should never be reached.
 		default:
-			return nil, fmt.Errorf("unsupported state %d", t.state)
+			return nil, &InvalidTokenizerStateError{state: t.state}
 		}
 
 		// In case the rune did not match any condition for the current state, it's unexpected and we return an error.
-		return nil, fmt.Errorf("unexpected rune %q when parsing a %q", r, t.state)
+		return nil, &UnexpectedRuneError{state: t.state, r: r}
 	}
 }
 

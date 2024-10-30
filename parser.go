@@ -5,7 +5,39 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strings"
 )
+
+type UnexpectedTokenError struct {
+	actualType, expectedType   TokenType
+	actualValue, expectedValue string
+}
+
+func (u *UnexpectedTokenError) Error() string {
+	return fmt.Sprintf("expected a %s with value %q but read a %s with value %q", u.expectedType, u.expectedValue, u.actualType, u.actualValue)
+}
+
+type UnexpectedTokenTypesError struct {
+	actual   TokenType
+	expected []TokenType
+}
+
+func (u *UnexpectedTokenTypesError) Error() string {
+	expectedString := make([]string, 0, len(u.expected))
+	for _, expected := range u.expected {
+		expectedString = append(expectedString, expected.String())
+	}
+
+	return fmt.Sprintf("expected one of %s but read a %s", strings.Join(expectedString, " or "), u.actual)
+}
+
+type InvalidIntegerLiteralError struct {
+	raw string
+}
+
+func (i *InvalidIntegerLiteralError) Error() string {
+	return fmt.Sprintf("failed parsing literal %q as an integer", i.raw)
+}
 
 func NewParser(tokenizer *Tokenizer) *Parser {
 	return &Parser{tokenizer: tokenizer}
@@ -68,7 +100,7 @@ func (p *Parser) parseExpression() (Expression, error) {
 	if token.Type == LiteralIntegerTokenType {
 		intValue, ok := new(big.Int).SetString(token.Value, 0)
 		if !ok {
-			return nil, fmt.Errorf("failed parsing literal integer from %s", token.Value)
+			return nil, &InvalidIntegerLiteralError{raw: token.Value}
 		}
 
 		return LiteralInteger{Value: intValue}, nil
@@ -78,7 +110,7 @@ func (p *Parser) parseExpression() (Expression, error) {
 		return Identifier{Name: token.Value}, nil
 	}
 
-	return nil, fmt.Errorf("expected a %s or an %s but read a %s", LiteralIntegerTokenType, IdentifierTokenType, token.Type)
+	return nil, &UnexpectedTokenTypesError{expected: []TokenType{LiteralIntegerTokenType, IdentifierTokenType}, actual: token.Type}
 }
 
 func (p *Parser) expectTokenWithType(tokenType TokenType) (string, error) {
@@ -88,7 +120,7 @@ func (p *Parser) expectTokenWithType(tokenType TokenType) (string, error) {
 	}
 
 	if token.Type != tokenType {
-		return "", fmt.Errorf("expected a %s but read a %s", tokenType, token.Type)
+		return "", &UnexpectedTokenTypesError{expected: []TokenType{tokenType}, actual: token.Type}
 	}
 
 	return token.Value, nil
@@ -101,7 +133,12 @@ func (p *Parser) expectToken(tokenType TokenType, value string) error {
 	}
 
 	if token.Type != tokenType || token.Value != value {
-		return fmt.Errorf("expected a %s with value %q but read a %s with value %q", tokenType, value, token.Type, token.Value)
+		return &UnexpectedTokenError{
+			expectedType:  tokenType,
+			expectedValue: value,
+			actualType:    token.Type,
+			actualValue:   token.Value,
+		}
 	}
 
 	return nil

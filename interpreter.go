@@ -24,7 +24,7 @@ func (i *Interpreter) Run(ast *AST) error {
 				if value, ok := i.memory[identifier.Name]; ok {
 					i.memory[assignement.Name] = value
 				} else {
-					return &ErrorUndefinedVariable{Name: identifier.Name}
+					return &UndefinedVariableError{Name: identifier.Name}
 				}
 			}
 		}
@@ -33,10 +33,10 @@ func (i *Interpreter) Run(ast *AST) error {
 	return nil
 }
 
-type ErrorUndefinedVariable struct {
+type UndefinedVariableError struct {
 	Name string
 }
 
-func (e *ErrorUndefinedVariable) Error() string {
-	return fmt.Sprintf("undefined variable %q", e.Name)
+func (u *UndefinedVariableError) Error() string {
+	return fmt.Sprintf("undefined variable %q", u.Name)
 }

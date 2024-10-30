@@ -16,7 +16,7 @@ func TestInterpreter(t *testing.T) {
 		"   ":           nil,
 		"a = 10":        nil,
 		"a = 10\nb = a": nil,
-		"b = a":         &jlang.ErrorUndefinedVariable{Name: "a"},
+		"b = a":         &jlang.UndefinedVariableError{Name: "a"},
 	} {
 		t.Run(testCase, func(t *testing.T) {
 			t.Parallel()
