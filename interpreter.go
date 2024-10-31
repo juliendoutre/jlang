@@ -5,8 +5,20 @@ import (
 	"math/big"
 )
 
+func NewExecution() Execution {
+	return Execution{
+		Sets:      map[string]Set{},
+		Variables: map[string]Value{},
+	}
+}
+
+type Execution struct {
+	Sets      map[string]Set
+	Variables map[string]Value
+}
+
 func NewInterpreter() *Interpreter {
-	return &Interpreter{memory: map[string]*big.Int{}}
+	return &Interpreter{}
 }
 
 type Interpreter struct {
@@ -14,19 +26,16 @@ type Interpreter struct {
 }
 
 func (i *Interpreter) Run(ast *AST) error {
+	execution := NewExecution()
+
 	for _, statement := range ast.Statements {
-		if assignement, ok := statement.(Assignement); ok {
-			if literal, ok := assignement.Expression.(LiteralInteger); ok {
-				i.memory[assignement.Name] = literal.Value
+		if variableAssignement, ok := statement.(*VariableAssignement); ok {
+			value, err := variableAssignement.Expression.Evaluate(execution)
+			if err != nil {
+				return err
 			}
 
-			if identifier, ok := assignement.Expression.(Identifier); ok {
-				if value, ok := i.memory[identifier.Name]; ok {
-					i.memory[assignement.Name] = value
-				} else {
-					return &UndefinedVariableError{Name: identifier.Name}
-				}
-			}
+			execution.Variables[variableAssignement.Name] = value
 		}
 	}
 

@@ -24,8 +24,14 @@ Grouping
 { } ( ) [ ]
 ```
 
-Spaces are ignored unless they allow to separate two other tokens (for instance two identifiers) or they are part of a comment.
+Spaces are ignored unless they allow to separate two other tokens (for instance two identifiers), or they are part of a comment.
 
 ### Syntax
 
-WIP
+```jlang
+EMPTY = {} // Define an empty set
+BOOLEANS = {0, 1} // Define a set by enumerating its values
+BYTES = {0, ..., 255} // Define a set with a range
+EVEN_BYTES = { 0, 2, ..., 254 } // Define a set with a range and a step
+x = 100 // Assign a value to a variable
+```

@@ -67,34 +67,88 @@ func (p *Parser) Parse() (*AST, error) {
 }
 
 func (p *Parser) parseStatement() (Statement, error) {
-	return p.parseAssignement()
-}
-
-func (p *Parser) parseAssignement() (Assignement, error) {
-	identifier, err := p.expectTokenWithType(IdentifierTokenType)
+	name, err := p.expectTokenWithType(IdentifierTokenType)
 	if err != nil {
-		return Assignement{}, err
+		return nil, err
 	}
 
 	if err := p.expectToken(SymbolTokenType, "="); err != nil {
-		return Assignement{}, err
+		return nil, err
 	}
 
-	expression, err := p.parseExpression()
+	token, err := p.tokenizer.Next()
 	if err != nil {
-		return Assignement{}, err
+		return nil, err
 	}
 
-	return Assignement{
-		Name:       identifier,
+	if token.Type == SymbolTokenType && token.Value == "{" {
+		set, err := p.parseSet()
+		if err != nil {
+			return nil, err
+		}
+
+		return &SetAssignement{
+			Name: name,
+			Set:  set,
+		}, nil
+	}
+
+	expression, err := p.parseExpression(token)
+	if err != nil {
+		return nil, err
+	}
+
+	return &VariableAssignement{
+		Name:       name,
 		Expression: expression,
 	}, nil
 }
 
-func (p *Parser) parseExpression() (Expression, error) {
+func (p *Parser) parseSet() (Set, error) {
+	elements := []Expression{}
+
 	token, err := p.tokenizer.Next()
 	if err != nil {
 		return nil, err
+	}
+
+	// Empty set
+	if token.Type == SymbolTokenType && token.Value == "}" {
+		return &EnumerationSet{Elements: elements}, nil
+	}
+
+	for {
+		expression, err := p.parseExpression(token)
+		if err != nil {
+			return nil, err
+		}
+
+		elements = append(elements, expression)
+
+		token, err = p.tokenizer.Next()
+		if err != nil {
+			return nil, err
+		}
+
+		if token.Type == SymbolTokenType && token.Value == "," {
+			token = nil // force consuming a new token in the next expression parsing
+			continue
+		}
+
+		if token.Type == SymbolTokenType && token.Value == "}" {
+			return &EnumerationSet{Elements: elements}, nil
+		}
+	}
+}
+
+func (p *Parser) parseExpression(token *Token) (Expression, error) {
+	var err error
+
+	if token == nil {
+		token, err = p.tokenizer.Next()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if token.Type == LiteralIntegerTokenType {
@@ -103,11 +157,11 @@ func (p *Parser) parseExpression() (Expression, error) {
 			return nil, &InvalidIntegerLiteralError{raw: token.Value}
 		}
 
-		return LiteralInteger{Value: intValue}, nil
+		return &LiteralInteger{Value: intValue}, nil
 	}
 
 	if token.Type == IdentifierTokenType {
-		return Identifier{Name: token.Value}, nil
+		return &Identifier{Name: token.Value}, nil
 	}
 
 	return nil, &UnexpectedTokenTypesError{expected: []TokenType{LiteralIntegerTokenType, IdentifierTokenType}, actual: token.Type}
