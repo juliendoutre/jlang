@@ -76,29 +76,12 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return nil, err
 	}
 
-	token, err := p.tokenizer.Next()
+	expression, err := p.parseExpression(nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if token.Type == SymbolTokenType && token.Value == "{" {
-		set, err := p.parseSet()
-		if err != nil {
-			return nil, err
-		}
-
-		return &SetAssignement{
-			Name: name,
-			Set:  set,
-		}, nil
-	}
-
-	expression, err := p.parseExpression(token)
-	if err != nil {
-		return nil, err
-	}
-
-	return &VariableAssignement{
+	return &Assignement{
 		Name:       name,
 		Expression: expression,
 	}, nil
@@ -150,6 +133,10 @@ func (p *Parser) parseExpression(token *Token) (Expression, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if token.Type == SymbolTokenType && token.Value == "{" {
+		return p.parseSet()
 	}
 
 	if token.Type == LiteralIntegerTokenType {

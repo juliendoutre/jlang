@@ -14,8 +14,8 @@ type AST struct {
 // A Statement does not return a value.
 type Statement interface{}
 
-// A VariableAssignement associates an Expression with a Name that can be referenced later.
-type VariableAssignement struct {
+// An Assignement associates an Expression with a Name that can be referenced later.
+type Assignement struct {
 	Name       string
 	Expression Expression
 }
@@ -60,14 +60,11 @@ func (i *Identifier) Evaluate(context Execution) (Value, error) {
 	return value, nil
 }
 
-// A SetAssignement associates a Set with a Name that can be referenced later.
-type SetAssignement struct {
-	Name string
-	Set  Set
-}
-
 // A Set defines a set of items.
 type Set interface {
+	// A Set is an abstract expression.
+	Expression
+
 	// The number of items in a Set is called its Cardinality.
 	Cardinality() uint64
 }
@@ -75,6 +72,10 @@ type Set interface {
 // EnumerationSet defines a Set by listing all its elements.
 type EnumerationSet struct {
 	Elements []Expression
+}
+
+func (e *EnumerationSet) Evaluate(context Execution) (Value, error) {
+	return nil, nil
 }
 
 func (e *EnumerationSet) Cardinality() uint64 {

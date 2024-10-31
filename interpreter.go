@@ -26,13 +26,17 @@ func (i *Interpreter) Run(ast *AST) error {
 	execution := NewExecution()
 
 	for _, statement := range ast.Statements {
-		if variableAssignement, ok := statement.(*VariableAssignement); ok {
-			value, err := variableAssignement.Expression.Evaluate(execution)
-			if err != nil {
-				return fmt.Errorf("failed evaluating an expression: %w", err)
-			}
+		if variableAssignement, ok := statement.(*Assignement); ok {
+			if set, ok := variableAssignement.Expression.(Set); ok {
+				execution.Sets[variableAssignement.Name] = set
+			} else {
+				value, err := variableAssignement.Expression.Evaluate(execution)
+				if err != nil {
+					return err
+				}
 
-			execution.Variables[variableAssignement.Name] = value
+				execution.Variables[variableAssignement.Name] = value
+			}
 		}
 	}
 

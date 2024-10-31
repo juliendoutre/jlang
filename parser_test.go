@@ -16,37 +16,37 @@ func TestParser(t *testing.T) {
 		"":    {Statements: []jlang.Statement{}},
 		"   ": {Statements: []jlang.Statement{}},
 		"a = 10": {Statements: []jlang.Statement{
-			&jlang.VariableAssignement{
+			&jlang.Assignement{
 				Name:       "a",
 				Expression: &jlang.LiteralInteger{Value: big.NewInt(10)},
 			},
 		}},
 		"a = 10\nb = a": {Statements: []jlang.Statement{
-			&jlang.VariableAssignement{
+			&jlang.Assignement{
 				Name:       "a",
 				Expression: &jlang.LiteralInteger{Value: big.NewInt(10)},
 			},
-			&jlang.VariableAssignement{
+			&jlang.Assignement{
 				Name:       "b",
 				Expression: &jlang.Identifier{Name: "a"},
 			},
 		}},
 		"b = a": {Statements: []jlang.Statement{
-			&jlang.VariableAssignement{
+			&jlang.Assignement{
 				Name:       "b",
 				Expression: &jlang.Identifier{Name: "a"},
 			},
 		}},
 		"EMPTY = {}": {Statements: []jlang.Statement{
-			&jlang.SetAssignement{
-				Name: "EMPTY",
-				Set:  &jlang.EnumerationSet{Elements: []jlang.Expression{}},
+			&jlang.Assignement{
+				Name:       "EMPTY",
+				Expression: &jlang.EnumerationSet{Elements: []jlang.Expression{}},
 			},
 		}},
 		"BOOLEANS = {0, 1}": {Statements: []jlang.Statement{
-			&jlang.SetAssignement{
+			&jlang.Assignement{
 				Name: "BOOLEANS",
-				Set: &jlang.EnumerationSet{Elements: []jlang.Expression{
+				Expression: &jlang.EnumerationSet{Elements: []jlang.Expression{
 					&jlang.LiteralInteger{Value: big.NewInt(0)},
 					&jlang.LiteralInteger{Value: big.NewInt(1)},
 				}},
