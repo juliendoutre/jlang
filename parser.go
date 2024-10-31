@@ -132,6 +132,7 @@ func (p *Parser) parseSet() (Set, error) {
 
 		if token.Type == SymbolTokenType && token.Value == "," {
 			token = nil // force consuming a new token in the next expression parsing
+
 			continue
 		}
 

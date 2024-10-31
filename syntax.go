@@ -36,13 +36,13 @@ type LiteralInteger struct {
 }
 
 // It is both an Expression...
-func (l *LiteralInteger) Evaluate(context Execution) (Value, error) {
+func (l *LiteralInteger) Evaluate(_ Execution) (Value, error) {
 	return l, nil
 }
 
 // ... and a Value!
 func (l *LiteralInteger) Bytes() []byte {
-	return l.Bytes()
+	return l.Value.Bytes()
 }
 
 // An Identifier refers to a previously assigned Expression.

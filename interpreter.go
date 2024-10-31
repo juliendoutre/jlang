@@ -2,7 +2,6 @@ package jlang
 
 import (
 	"fmt"
-	"math/big"
 )
 
 func NewExecution() Execution {
@@ -21,9 +20,7 @@ func NewInterpreter() *Interpreter {
 	return &Interpreter{}
 }
 
-type Interpreter struct {
-	memory map[string]*big.Int
-}
+type Interpreter struct{}
 
 func (i *Interpreter) Run(ast *AST) error {
 	execution := NewExecution()
@@ -32,7 +29,7 @@ func (i *Interpreter) Run(ast *AST) error {
 		if variableAssignement, ok := statement.(*VariableAssignement); ok {
 			value, err := variableAssignement.Expression.Evaluate(execution)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed evaluating an expression: %w", err)
 			}
 
 			execution.Variables[variableAssignement.Name] = value
