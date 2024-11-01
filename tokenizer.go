@@ -54,13 +54,9 @@ func (t TokenType) String() string {
 }
 
 type Token struct {
-	Type       TokenType
-	Value      string
-	Start, End Location
-}
-
-type Location struct {
-	Line, Column uint
+	Type         TokenType
+	Value        string
+	Delimitation Delimitation
 }
 
 func NewTokenizer(reader io.RuneScanner) *Tokenizer {
@@ -99,10 +95,10 @@ func (t *Tokenizer) Next() (*Token, error) {
 					defer t.reset()
 					defer t.increment(r)
 
-					return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+					return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 				// This should never be reached.
 				default:
-					return nil, &InvalidTokenizerStateError{state: t.state}
+					return nil, &LocatedError{Err: &InvalidTokenizerStateError{state: t.state}, Location: t.cursor}
 				}
 			}
 
@@ -164,7 +160,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.reset()
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
 			// If a symbol, we reached the end of the identifier.
@@ -173,7 +169,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.set(SymbolTokenType, r)
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 		// Tokenizer started parsing a literal integer token in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
@@ -192,7 +188,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.reset()
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
 			// If a symbol, we reached the end of the literal.
@@ -201,7 +197,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.set(SymbolTokenType, r)
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 		// Tokenizer started parsing a symbol in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
@@ -212,7 +208,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.reset()
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
 			// If a letter, we reached the end of the symbol.
@@ -221,7 +217,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.set(IdentifierTokenType, r)
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
 			// If a digit, we reached the end of the symbol.
@@ -230,7 +226,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.set(LiteralIntegerTokenType, r)
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
 			// If another symbol:
@@ -253,7 +249,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.set(SymbolTokenType, r)
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 		// Tokenizer started parsing a comment in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
@@ -264,7 +260,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				defer t.reset()
 				defer t.increment(r)
 
-				return &Token{Type: t.state, Value: t.buffer.String(), Start: t.getStart(), End: t.cursor}, nil
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
 			// Any other printable character is considered part of the comment.
@@ -276,11 +272,11 @@ func (t *Tokenizer) Next() (*Token, error) {
 			}
 		// This should never be reached.
 		default:
-			return nil, &InvalidTokenizerStateError{state: t.state}
+			return nil, &LocatedError{Err: &InvalidTokenizerStateError{state: t.state}, Location: t.cursor}
 		}
 
 		// In case the rune did not match any condition for the current state, it's unexpected and we return an error.
-		return nil, &UnexpectedRuneError{state: t.state, r: r}
+		return nil, &LocatedError{Err: &UnexpectedRuneError{state: t.state, r: r}, Location: t.cursor}
 	}
 }
 
