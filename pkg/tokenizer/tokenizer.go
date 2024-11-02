@@ -189,9 +189,17 @@ func (t *Tokenizer) Next() (*Token, error) {
 				return nil, &UnclosedLiteralStringError{}
 			}
 
-			// If a double quote, we reached the end of the literal string.
-			// TODO: manage escaping of double quotes
+			// If a double quote,
 			if r == '"' {
+				// If the last character in the buffer is a backslash, escape the double quote.
+				if t.buffer.Len() != 0 && t.buffer.Bytes()[t.buffer.Len()-1] == '\\' {
+					t.buffer.WriteRune(r)
+					t.increment(r)
+
+					continue
+				}
+
+				// Else, we reached the end of the literal string.
 				t.buffer.WriteRune(r)
 				t.increment(r)
 
