@@ -99,6 +99,14 @@ func TestTokenizer(t *testing.T) {
 			{Type: tokenizer.CommentTokenType, Value: "// Another comment", Delimitation: sources.Delimitation{Start: sources.Location{Line: 1, Column: 6}, End: sources.Location{Line: 1, Column: 24}}},
 			{Type: tokenizer.LiteralIntegerTokenType, Value: "10", Delimitation: sources.Delimitation{Start: sources.Location{Line: 2, Column: 0}, End: sources.Location{Line: 2, Column: 2}}},
 		},
+		"a = \"this is a string!\"\nb = \"another string\"": {
+			{Type: tokenizer.IdentifierTokenType, Value: "a", Delimitation: sources.Delimitation{Start: sources.Location{Line: 0, Column: 0}, End: sources.Location{Line: 0, Column: 1}}},
+			{Type: tokenizer.SymbolTokenType, Value: "=", Delimitation: sources.Delimitation{Start: sources.Location{Line: 0, Column: 2}, End: sources.Location{Line: 0, Column: 3}}},
+			{Type: tokenizer.LiteralStringTokenType, Value: "\"this is a string!\"", Delimitation: sources.Delimitation{Start: sources.Location{Line: 0, Column: 4}, End: sources.Location{Line: 0, Column: 23}}},
+			{Type: tokenizer.IdentifierTokenType, Value: "b", Delimitation: sources.Delimitation{Start: sources.Location{Line: 1, Column: 0}, End: sources.Location{Line: 1, Column: 1}}},
+			{Type: tokenizer.SymbolTokenType, Value: "=", Delimitation: sources.Delimitation{Start: sources.Location{Line: 1, Column: 2}, End: sources.Location{Line: 1, Column: 3}}},
+			{Type: tokenizer.LiteralStringTokenType, Value: "\"another string\"", Delimitation: sources.Delimitation{Start: sources.Location{Line: 1, Column: 4}, End: sources.Location{Line: 1, Column: 20}}},
+		},
 	} {
 		t.Run(testCase, func(t *testing.T) {
 			t.Parallel()

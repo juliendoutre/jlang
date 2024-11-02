@@ -48,6 +48,9 @@ func (t *Tokenizer) Next() (*Token, error) {
 					defer t.increment(r)
 
 					return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
+				// If we were parsing a literal string that was not closed properly, this is an error.
+				case LiteralStringTokenType:
+					return nil, &sources.LocatedError{Err: &UnclosedLiteralStringError{}, Location: t.cursor}
 				// This should never be reached.
 				default:
 					return nil, &sources.LocatedError{Err: &InvalidTokenizerStateError{state: t.state}, Location: t.cursor}
@@ -87,6 +90,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 				continue
 			}
 
+			// If a double quote, prepare next iterations to scan a literal string.
+			if r == '"' {
+				t.state = LiteralStringTokenType
+				t.buffer.WriteRune(r)
+				t.increment(r)
+
+				continue
+			}
+
 			// If a symbol, prepare next iterations to scan a symbol.
 			if isSymbol(string(r)) {
 				t.state = SymbolTokenType
@@ -110,6 +122,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if unicode.IsSpace(r) {
 				// Prepare to reset t.state and t.buffer after we returned the token.
 				defer t.reset()
+				defer t.increment(r)
+
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
+			}
+
+			// If a double quote, we reached the end of the identifier.
+			if r == '"' {
+				// Prepare to set t.state and t.buffer to a string literal in the next iteration.
+				defer t.set(LiteralStringTokenType, r)
 				defer t.increment(r)
 
 				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
@@ -143,6 +164,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
 
+			// If a double quote, we reached the end of the identifier.
+			if r == '"' {
+				// Prepare to set t.state and t.buffer to a string literal in the next iteration.
+				defer t.set(LiteralStringTokenType, r)
+				defer t.increment(r)
+
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
+			}
+
 			// If a symbol, we reached the end of the literal.
 			if isSymbol(string(r)) {
 				// Prepare to set t.state and t.buffer to the symbol in the next iteration.
@@ -151,6 +181,31 @@ func (t *Tokenizer) Next() (*Token, error) {
 
 				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
 			}
+		// Tokenizer started parsing a literal string in previous iterations of the loop.
+		// It's content so far is stored in t.buffer.
+		case LiteralStringTokenType:
+			// Line jumps should not be part of a string.
+			if r == '\n' {
+				return nil, &UnclosedLiteralStringError{}
+			}
+
+			// If a double quote, we reached the end of the literal string.
+			// TODO: manage escaping of double quotes
+			if r == '"' {
+				t.buffer.WriteRune(r)
+				t.increment(r)
+
+				// Prepare to reset t.state and t.buffer after we returned the token.
+				defer t.reset()
+
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
+			}
+
+			// Any other character can be part of a string.
+			t.buffer.WriteRune(r)
+			t.increment(r)
+
+			continue
 		// Tokenizer started parsing a symbol in previous iterations of the loop.
 		// It's content so far is stored in t.buffer.
 		case SymbolTokenType:
@@ -176,6 +231,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 			if unicode.IsDigit(r) {
 				// Prepare to set t.state and t.buffer to a literal integer in the next iteration.
 				defer t.set(LiteralIntegerTokenType, r)
+				defer t.increment(r)
+
+				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil
+			}
+
+			// If a double quote, we reached the end of the symbol.
+			if r == '"' {
+				// Prepare to set t.state and t.buffer to a string literal in the next iteration.
+				defer t.set(LiteralStringTokenType, r)
 				defer t.increment(r)
 
 				return &Token{Type: t.state, Value: t.buffer.String(), Delimitation: sources.Delimitation{Start: t.getStart(), End: t.cursor}}, nil

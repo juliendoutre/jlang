@@ -8,6 +8,7 @@ const (
 	UndefinedTokenType TokenType = iota
 	IdentifierTokenType
 	LiteralIntegerTokenType
+	LiteralStringTokenType
 	SymbolTokenType
 	CommentTokenType
 )
@@ -20,6 +21,8 @@ func (t TokenType) String() string {
 		return "identifier token"
 	case LiteralIntegerTokenType:
 		return "literal integer token"
+	case LiteralStringTokenType:
+		return "literal string token"
 	case SymbolTokenType:
 		return "symbol token"
 	case CommentTokenType:

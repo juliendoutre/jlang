@@ -18,3 +18,9 @@ type UnexpectedRuneError struct {
 func (u *UnexpectedRuneError) Error() string {
 	return fmt.Sprintf("read an unexpected rune %q while parsing a %s", u.r, u.state)
 }
+
+type UnclosedLiteralStringError struct{}
+
+func (u *UnclosedLiteralStringError) Error() string {
+	return "a literal string was not be closed properly"
+}
