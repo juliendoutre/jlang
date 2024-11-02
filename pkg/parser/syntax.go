@@ -1,7 +1,9 @@
-package jlang
+package parser
 
 import (
 	"math/big"
+
+	"github.com/juliendoutre/jlang/pkg/sources"
 )
 
 // AST stands for Abstract Syntax Tree.
@@ -13,24 +15,25 @@ type AST struct {
 
 // A Statement does not return a value.
 type Statement interface {
-	Delimitable
+	sources.Delimitable
 }
 
 // An Assignement associates an Expression with a Name that can be referenced later.
 type Assignement struct {
 	Name         string
 	Expression   Expression
-	Delimitation Delimitation
+	Delimitation sources.Delimitation
 }
 
-func (a *Assignement) Delimit() Delimitation {
+func (a *Assignement) Delimit() sources.Delimitation {
 	return a.Delimitation
 }
 
 // An expression evaluates to a Value in the context of an Execution.
 type Expression interface {
-	Delimitable
-	Evaluate(context Execution) (Value, error)
+	Evaluate(context Context) (Value, error)
+
+	sources.Delimitable
 }
 
 // A Value can represent many things but is always simply just a bunch of bytes.
@@ -41,15 +44,15 @@ type Value interface {
 // A LiteralInteger represents an integer Value.
 type LiteralInteger struct {
 	Value        *big.Int
-	Delimitation Delimitation
+	Delimitation sources.Delimitation
 }
 
-func (l *LiteralInteger) Delimit() Delimitation {
+func (l *LiteralInteger) Delimit() sources.Delimitation {
 	return l.Delimitation
 }
 
 // It is both an Expression...
-func (l *LiteralInteger) Evaluate(_ Execution) (Value, error) {
+func (l *LiteralInteger) Evaluate(_ Context) (Value, error) {
 	return l, nil
 }
 
@@ -61,14 +64,14 @@ func (l *LiteralInteger) Bytes() []byte {
 // An Identifier refers to a previously assigned Expression.
 type Identifier struct {
 	Name         string
-	Delimitation Delimitation
+	Delimitation sources.Delimitation
 }
 
-func (i *Identifier) Delimit() Delimitation {
+func (i *Identifier) Delimit() sources.Delimitation {
 	return i.Delimitation
 }
 
-func (i *Identifier) Evaluate(context Execution) (Value, error) {
+func (i *Identifier) Evaluate(context Context) (Value, error) {
 	value, ok := context.Variables[i.Name]
 
 	if !ok {
@@ -90,14 +93,14 @@ type Set interface {
 // EnumerationSet defines a Set by listing all its elements.
 type EnumerationSet struct {
 	Elements     []Expression
-	Delimitation Delimitation
+	Delimitation sources.Delimitation
 }
 
-func (e *EnumerationSet) Delimit() Delimitation {
+func (e *EnumerationSet) Delimit() sources.Delimitation {
 	return e.Delimitation
 }
 
-func (e *EnumerationSet) Evaluate(_ Execution) (Value, error) {
+func (e *EnumerationSet) Evaluate(_ Context) (Value, error) {
 	return nil, nil
 }
 
