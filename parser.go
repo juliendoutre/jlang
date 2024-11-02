@@ -82,12 +82,16 @@ func (p *Parser) parseStatement() (Statement, error) {
 	}
 
 	return &Assignement{
-		Name:       name,
+		Name:       name.Value,
 		Expression: expression,
+		Delimitation: Delimitation{
+			Start: name.Delimitation.Start,
+			End:   expression.Delimit().End,
+		},
 	}, nil
 }
 
-func (p *Parser) parseSet() (Set, error) {
+func (p *Parser) parseSet(start Location) (Set, error) {
 	elements := []Expression{}
 
 	token, err := p.tokenizer.Next()
@@ -97,7 +101,10 @@ func (p *Parser) parseSet() (Set, error) {
 
 	// Empty set
 	if token.Type == SymbolTokenType && token.Value == "}" {
-		return &EnumerationSet{Elements: elements}, nil
+		return &EnumerationSet{
+			Elements:     elements,
+			Delimitation: Delimitation{Start: start, End: token.Delimitation.End},
+		}, nil
 	}
 
 	for {
@@ -120,7 +127,10 @@ func (p *Parser) parseSet() (Set, error) {
 		}
 
 		if token.Type == SymbolTokenType && token.Value == "}" {
-			return &EnumerationSet{Elements: elements}, nil
+			return &EnumerationSet{
+				Elements:     elements,
+				Delimitation: Delimitation{Start: start, End: token.Delimitation.End},
+			}, nil
 		}
 	}
 }
@@ -136,7 +146,7 @@ func (p *Parser) parseExpression(token *Token) (Expression, error) {
 	}
 
 	if token.Type == SymbolTokenType && token.Value == "{" {
-		return p.parseSet()
+		return p.parseSet(token.Delimitation.Start)
 	}
 
 	if token.Type == LiteralIntegerTokenType {
@@ -145,27 +155,27 @@ func (p *Parser) parseExpression(token *Token) (Expression, error) {
 			return nil, &DelimitedError{Err: &InvalidIntegerLiteralError{raw: token.Value}, Delimitation: token.Delimitation}
 		}
 
-		return &LiteralInteger{Value: intValue}, nil
+		return &LiteralInteger{Value: intValue, Delimitation: token.Delimitation}, nil
 	}
 
 	if token.Type == IdentifierTokenType {
-		return &Identifier{Name: token.Value}, nil
+		return &Identifier{Name: token.Value, Delimitation: token.Delimitation}, nil
 	}
 
 	return nil, &DelimitedError{Err: &UnexpectedTokenTypesError{expected: []TokenType{LiteralIntegerTokenType, IdentifierTokenType}, actual: token.Type}, Delimitation: token.Delimitation}
 }
 
-func (p *Parser) expectTokenWithType(tokenType TokenType) (string, error) {
+func (p *Parser) expectTokenWithType(tokenType TokenType) (*Token, error) {
 	token, err := p.tokenizer.Next()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if token.Type != tokenType {
-		return "", &DelimitedError{Err: &UnexpectedTokenTypesError{expected: []TokenType{tokenType}, actual: token.Type}, Delimitation: token.Delimitation}
+		return nil, &DelimitedError{Err: &UnexpectedTokenTypesError{expected: []TokenType{tokenType}, actual: token.Type}, Delimitation: token.Delimitation}
 	}
 
-	return token.Value, nil
+	return token, nil
 }
 
 func (p *Parser) expectToken(tokenType TokenType, value string) error {

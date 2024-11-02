@@ -12,16 +12,24 @@ type AST struct {
 }
 
 // A Statement does not return a value.
-type Statement interface{}
+type Statement interface {
+	Delimitable
+}
 
 // An Assignement associates an Expression with a Name that can be referenced later.
 type Assignement struct {
-	Name       string
-	Expression Expression
+	Name         string
+	Expression   Expression
+	Delimitation Delimitation
+}
+
+func (a *Assignement) Delimit() Delimitation {
+	return a.Delimitation
 }
 
 // An expression evaluates to a Value in the context of an Execution.
 type Expression interface {
+	Delimitable
 	Evaluate(context Execution) (Value, error)
 }
 
@@ -32,7 +40,12 @@ type Value interface {
 
 // A LiteralInteger represents an integer Value.
 type LiteralInteger struct {
-	Value *big.Int
+	Value        *big.Int
+	Delimitation Delimitation
+}
+
+func (l *LiteralInteger) Delimit() Delimitation {
+	return l.Delimitation
 }
 
 // It is both an Expression...
@@ -47,7 +60,12 @@ func (l *LiteralInteger) Bytes() []byte {
 
 // An Identifier refers to a previously assigned Expression.
 type Identifier struct {
-	Name string
+	Name         string
+	Delimitation Delimitation
+}
+
+func (i *Identifier) Delimit() Delimitation {
+	return i.Delimitation
 }
 
 func (i *Identifier) Evaluate(context Execution) (Value, error) {
@@ -71,10 +89,15 @@ type Set interface {
 
 // EnumerationSet defines a Set by listing all its elements.
 type EnumerationSet struct {
-	Elements []Expression
+	Elements     []Expression
+	Delimitation Delimitation
 }
 
-func (e *EnumerationSet) Evaluate(context Execution) (Value, error) {
+func (e *EnumerationSet) Delimit() Delimitation {
+	return e.Delimitation
+}
+
+func (e *EnumerationSet) Evaluate(_ Execution) (Value, error) {
 	return nil, nil
 }
 

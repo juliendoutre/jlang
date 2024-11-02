@@ -19,7 +19,7 @@ func (l *LocatedError) Error() string {
 	return l.Err.Error()
 }
 
-// A DelimitedError enriches an error Delimitation.
+// A DelimitedError enriches an error with a Delimitation.
 type DelimitedError struct {
 	Err          error
 	Delimitation Delimitation
@@ -36,4 +36,9 @@ func (d *DelimitedError) Error() string {
 // A Delimitation identifies a sequence of runes in a UTF-8 encoded text.
 type Delimitation struct {
 	Start, End Location
+}
+
+// A Delimitable provides a Delimitation.
+type Delimitable interface {
+	Delimit() Delimitation
 }

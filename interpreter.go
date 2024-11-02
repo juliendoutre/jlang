@@ -32,7 +32,7 @@ func (i *Interpreter) Run(ast *AST) error {
 			} else {
 				value, err := variableAssignement.Expression.Evaluate(execution)
 				if err != nil {
-					return err
+					return &DelimitedError{Err: err, Delimitation: variableAssignement.Expression.Delimit()}
 				}
 
 				execution.Variables[variableAssignement.Name] = value
