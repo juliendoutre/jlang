@@ -11,7 +11,7 @@ import (
 	"github.com/juliendoutre/jlang/pkg/sources"
 )
 
-func New(reader io.RuneScanner) *Tokenizer {
+func New(reader io.RuneReader) *Tokenizer {
 	return &Tokenizer{
 		reader: reader,
 		buffer: bytes.Buffer{},

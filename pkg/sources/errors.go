@@ -1,5 +1,7 @@
 package sources
 
+import "fmt"
+
 // A LocatedError enriches an error with a Location.
 type LocatedError struct {
 	Err      error
@@ -26,4 +28,20 @@ func (d *DelimitedError) Unwrap() error {
 
 func (d *DelimitedError) Error() string {
 	return d.Err.Error()
+}
+
+type UnsupportedSchemeError struct {
+	Scheme string
+}
+
+func (u *UnsupportedSchemeError) Error() string {
+	return fmt.Sprintf("unsupported scheme %q", u.Scheme)
+}
+
+type DigestMismatchError struct {
+	ExpectedDigest, ActualDigest []byte
+}
+
+func (d *DigestMismatchError) Error() string {
+	return fmt.Sprintf("expected digest %x but got %x ", d.ExpectedDigest, d.ActualDigest)
 }
