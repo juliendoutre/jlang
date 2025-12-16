@@ -96,6 +96,37 @@ impl<'a> Lexer<'a> {
         result.parse().unwrap_or(0)
     }
 
+    /// Parse a character literal (e.g., 'a')
+    fn parse_character(&mut self) -> Option<char> {
+        // We've already consumed the opening '
+
+        // Get the character
+        let ch = self.advance()?;
+
+        // Check for escape sequences
+        let result = if ch == '\\' {
+            match self.advance()? {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '\\' => '\\',
+                '\'' => '\'',
+                '"' => '"',
+                '0' => '\0',
+                c => c, // Unknown escape, just use the character
+            }
+        } else {
+            ch
+        };
+
+        // Consume the closing '
+        if let Some(&'\'') = self.peek() {
+            self.advance();
+        }
+
+        Some(result)
+    }
+
     /// Get the next token
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
@@ -164,7 +195,24 @@ impl<'a> Lexer<'a> {
                     self.next_token()
                 }
             }
-            Some('-') => Token::new(TokenType::Minus, position),
+            Some('-') => {
+                // Check for ->
+                if let Some(&'>') = self.peek() {
+                    self.advance();
+                    Token::new(TokenType::Arrow, position)
+                } else {
+                    Token::new(TokenType::Minus, position)
+                }
+            }
+            Some('\'') => {
+                // Character literal
+                if let Some(ch) = self.parse_character() {
+                    Token::new(TokenType::Character(ch), position)
+                } else {
+                    // Invalid character literal, skip it
+                    self.next_token()
+                }
+            }
             Some(ch) if ch.is_alphabetic() => {
                 let identifier = self.parse_identifier(ch);
                 Token::new(TokenType::Identifier(identifier), position)

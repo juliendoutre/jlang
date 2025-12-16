@@ -8,6 +8,9 @@ pub enum Expr {
     /// An integer literal
     Integer(i64),
 
+    /// A character literal (converted to UTF-8 value)
+    Character(char),
+
     /// Explicit set: { 0, 1, 2, 3 }
     ExplicitSet(Vec<Expr>),
 
@@ -34,6 +37,12 @@ pub enum Expr {
 
     /// Function call: card(A), out(b), in()
     FunctionCall { name: String, args: Vec<Expr> },
+
+    /// Array type: [n]BYTE or [5]BYTE
+    ArrayType {
+        size: Box<Expr>,
+        element_type: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,11 +64,33 @@ pub enum Statement {
     /// Variable assignment: a = card(A)
     Assignment { name: String, value: Expr },
 
+    /// Variable assignment with type constraint: n: BYTE = in()
+    TypedAssignment {
+        name: String,
+        type_expr: Expr,
+        value: Expr,
+    },
+
+    /// Function definition: f = (x: T) -> (y: U) { body }
+    FunctionDefinition {
+        name: String,
+        params: Vec<Parameter>,
+        returns: Vec<Parameter>,
+        body: Vec<Statement>,
+    },
+
     /// Expression statement (function call): out(b)
     ExpressionStatement(Expr),
 
     /// Comment or empty line (we'll keep these for completeness)
     Empty,
+}
+
+/// Function parameter with optional type constraint
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parameter {
+    pub name: String,
+    pub type_expr: Option<Expr>,
 }
 
 /// The top-level AST is a list of statements

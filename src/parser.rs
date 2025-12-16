@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOperator, Expr, Program, Statement};
+use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement};
 use crate::token::{Token, TokenType};
 use std::iter::Peekable;
 
@@ -99,18 +99,59 @@ where
                     // Check if this is a definition/assignment or a function call
                     match self.peek() {
                         Some(Token {
+                            token_type: TokenType::Colon,
+                            ..
+                        }) => {
+                            // Typed assignment: n: BYTE = in()
+                            self.advance(); // consume :
+                            let type_expr = self.parse_type_expr()?;
+                            self.expect(TokenType::Equals)?;
+                            let value = self.parse_expression()?;
+                            Ok(Statement::TypedAssignment {
+                                name,
+                                type_expr,
+                                value,
+                            })
+                        }
+                        Some(Token {
                             token_type: TokenType::Equals,
                             ..
                         }) => {
                             self.advance(); // consume =
-                            let value = self.parse_expression()?;
 
-                            // Determine if it's a definition or assignment based on naming convention
-                            // Uppercase = definition, lowercase = assignment
-                            if name.chars().next().unwrap().is_uppercase() {
-                                Ok(Statement::Definition { name, value })
+                            // Check for function definition: f = (...) -> (...) { ... }
+                            if let Some(Token {
+                                token_type: TokenType::LeftParen,
+                                ..
+                            }) = self.peek()
+                            {
+                                // Try to parse as function definition
+                                if let Ok(func_def) =
+                                    self.try_parse_function_definition(name.clone())
+                                {
+                                    return Ok(func_def);
+                                }
+
+                                // Otherwise parse as regular expression
+                                let value = self.parse_expression()?;
+
+                                // Determine if it's a definition or assignment based on naming convention
+                                // Uppercase = definition, lowercase = assignment
+                                if name.chars().next().unwrap().is_uppercase() {
+                                    Ok(Statement::Definition { name, value })
+                                } else {
+                                    Ok(Statement::Assignment { name, value })
+                                }
                             } else {
-                                Ok(Statement::Assignment { name, value })
+                                let value = self.parse_expression()?;
+
+                                // Determine if it's a definition or assignment based on naming convention
+                                // Uppercase = definition, lowercase = assignment
+                                if name.chars().next().unwrap().is_uppercase() {
+                                    Ok(Statement::Definition { name, value })
+                                } else {
+                                    Ok(Statement::Assignment { name, value })
+                                }
                             }
                         }
                         Some(Token {
@@ -135,6 +176,137 @@ where
                 _ => Err(ParseError::new("Expected identifier at start of statement")),
             },
         }
+    }
+
+    /// Try to parse a function definition
+    fn try_parse_function_definition(&mut self, name: String) -> Result<Statement, ParseError> {
+        self.expect(TokenType::LeftParen)?;
+        let params = self.parse_parameters()?;
+        self.expect(TokenType::RightParen)?;
+        self.expect(TokenType::Arrow)?;
+        self.expect(TokenType::LeftParen)?;
+        let returns = self.parse_parameters()?;
+        self.expect(TokenType::RightParen)?;
+        self.expect(TokenType::LeftBrace)?;
+
+        // Parse body (simplified - just skip to closing brace for now)
+        let body = self.parse_function_body()?;
+
+        self.expect(TokenType::RightBrace)?;
+
+        Ok(Statement::FunctionDefinition {
+            name,
+            params,
+            returns,
+            body,
+        })
+    }
+
+    /// Parse function parameters
+    fn parse_parameters(&mut self) -> Result<Vec<Parameter>, ParseError> {
+        let mut params = Vec::new();
+
+        // Check for empty parameters
+        if let Some(Token {
+            token_type: TokenType::RightParen,
+            ..
+        }) = self.peek()
+        {
+            return Ok(params);
+        }
+
+        loop {
+            // Parse parameter name
+            let name = match self.advance() {
+                Some(Token {
+                    token_type: TokenType::Identifier(n),
+                    ..
+                }) => n,
+                _ => return Err(ParseError::new("Expected parameter name")),
+            };
+
+            // Check for type annotation
+            let type_expr = if let Some(Token {
+                token_type: TokenType::Colon,
+                ..
+            }) = self.peek()
+            {
+                self.advance(); // consume :
+                Some(self.parse_type_expr()?)
+            } else {
+                None
+            };
+
+            params.push(Parameter { name, type_expr });
+
+            match self.peek() {
+                Some(Token {
+                    token_type: TokenType::Comma,
+                    ..
+                }) => {
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+
+        Ok(params)
+    }
+
+    /// Parse a type expression (can include array types)
+    fn parse_type_expr(&mut self) -> Result<Expr, ParseError> {
+        if let Some(Token {
+            token_type: TokenType::LeftBracket,
+            ..
+        }) = self.peek()
+        {
+            // Array type: [n]BYTE
+            self.advance(); // consume [
+            let size = self.parse_expression()?;
+            self.expect(TokenType::RightBracket)?;
+            let element_type = self.parse_type_expr()?;
+            Ok(Expr::ArrayType {
+                size: Box::new(size),
+                element_type: Box::new(element_type),
+            })
+        } else {
+            self.parse_expression()
+        }
+    }
+
+    /// Parse function body (for now, just collect statements until closing brace)
+    fn parse_function_body(&mut self) -> Result<Vec<Statement>, ParseError> {
+        let mut body = Vec::new();
+        self.skip_newlines();
+
+        while let Some(token) = self.peek() {
+            if matches!(token.token_type, TokenType::RightBrace) {
+                break;
+            }
+
+            // For now, just parse empty statements or comments
+            // The actual body implementation will come later
+            self.skip_newlines();
+            if matches!(
+                self.peek().map(|t| &t.token_type),
+                Some(TokenType::RightBrace)
+            ) {
+                break;
+            }
+
+            // Skip everything until we find a newline or closing brace
+            while let Some(token) = self.peek() {
+                if matches!(token.token_type, TokenType::Newline | TokenType::RightBrace) {
+                    break;
+                }
+                self.advance();
+            }
+
+            body.push(Statement::Empty);
+            self.skip_newlines();
+        }
+
+        Ok(body)
     }
 
     /// Parse function arguments
@@ -218,6 +390,10 @@ where
                 ..
             }) => Ok(Expr::Integer(n)),
             Some(Token {
+                token_type: TokenType::Character(c),
+                ..
+            }) => Ok(Expr::Character(c)),
+            Some(Token {
                 token_type: TokenType::Identifier(name),
                 ..
             }) => {
@@ -239,6 +415,19 @@ where
                 token_type: TokenType::LeftBrace,
                 ..
             }) => self.parse_set_expr(),
+            Some(Token {
+                token_type: TokenType::LeftBracket,
+                ..
+            }) => {
+                // Array type: [size]element_type
+                let size = self.parse_expression()?;
+                self.expect(TokenType::RightBracket)?;
+                let element_type = self.parse_primary_expr()?;
+                Ok(Expr::ArrayType {
+                    size: Box::new(size),
+                    element_type: Box::new(element_type),
+                })
+            }
             Some(token) => Err(ParseError::new(format!(
                 "Unexpected token in expression: {:?}",
                 token.token_type

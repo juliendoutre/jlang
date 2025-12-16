@@ -17,6 +17,7 @@ pub enum TokenType {
     // Literals
     Identifier(String),
     Integer(i64),
+    Character(char),
 
     // Punctuation
     LeftBrace,    // {
@@ -34,6 +35,7 @@ pub enum TokenType {
     DoubleEquals, // ==
     Plus,         // +
     Minus,        // -
+    Arrow,        // ->
     Ellipsis,     // ...
     Percent,      // %
     LessThan,     // <

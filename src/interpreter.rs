@@ -9,6 +9,10 @@ pub enum Value {
     Integer(i64),
     /// A set of integers
     Set(HashSet<i64>),
+    /// An array of integers
+    Array(Vec<i64>),
+    /// A type (used for type constraints)
+    Type(Box<Value>),
 }
 
 impl fmt::Display for Value {
@@ -27,6 +31,17 @@ impl fmt::Display for Value {
                 }
                 write!(f, "}}")
             }
+            Value::Array(arr) => {
+                write!(f, "[")?;
+                for (i, elem) in arr.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, "]")
+            }
+            Value::Type(inner) => write!(f, "Type({})", inner),
         }
     }
 }
@@ -106,6 +121,32 @@ impl Interpreter {
                 let val = self.eval_expr(value)?;
                 self.env.define(name.clone(), val);
             }
+            Statement::TypedAssignment {
+                name,
+                type_expr,
+                value,
+            } => {
+                // Evaluate the type expression (for validation or size info)
+                let _type_val = self.eval_expr(type_expr)?;
+
+                // Evaluate the value
+                let val = self.eval_expr(value)?;
+
+                // TODO: Add type checking here
+
+                self.env.define(name.clone(), val);
+            }
+            Statement::FunctionDefinition {
+                name,
+                params: _,
+                returns: _,
+                body: _,
+            } => {
+                // For now, just skip function definitions
+                // We'll implement function calls later
+                // Store a placeholder
+                self.env.define(name.clone(), Value::Integer(0));
+            }
             Statement::ExpressionStatement(expr) => {
                 self.eval_expr(expr)?;
             }
@@ -121,6 +162,11 @@ impl Interpreter {
 
             Expr::Integer(i) => Ok(Value::Integer(*i)),
 
+            Expr::Character(c) => {
+                // Convert character to its UTF-8 encoding value
+                Ok(Value::Integer(*c as i64))
+            }
+
             Expr::ExplicitSet(elements) => {
                 let mut set = HashSet::new();
                 for elem_expr in elements {
@@ -128,9 +174,10 @@ impl Interpreter {
                         Value::Integer(i) => {
                             set.insert(i);
                         }
-                        Value::Set(_) => {
+                        Value::Set(_) | Value::Array(_) | Value::Type(_) => {
                             return Err(RuntimeError::new(
-                                "Cannot have sets as elements of a set".to_string(),
+                                "Cannot have sets, arrays, or types as elements of a set"
+                                    .to_string(),
                             ));
                         }
                     }
@@ -285,6 +332,16 @@ impl Interpreter {
             }
 
             Expr::FunctionCall { name, args } => self.call_function(name, args),
+
+            Expr::ArrayType { size, element_type } => {
+                // For now, just return the size as an integer
+                // This is used in type constraints
+                let size_val = self.eval_expr(size)?;
+                let _elem_type = self.eval_expr(element_type)?;
+
+                // Return a type representation
+                Ok(Value::Type(Box::new(size_val)))
+            }
         }
     }
 
@@ -301,8 +358,9 @@ impl Interpreter {
                 let arg = self.eval_expr(&args[0])?;
                 match arg {
                     Value::Set(set) => Ok(Value::Integer(set.len() as i64)),
-                    Value::Integer(_) => Err(RuntimeError::new(
-                        "card() expects a set argument".to_string(),
+                    Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
+                    Value::Integer(_) | Value::Type(_) => Err(RuntimeError::new(
+                        "card() expects a set or array argument".to_string(),
                     )),
                 }
             }
@@ -317,6 +375,32 @@ impl Interpreter {
                 let arg = self.eval_expr(&args[0])?;
                 println!("{}", arg);
                 Ok(arg)
+            }
+
+            "in" => {
+                // Read from standard input
+                // For now, return an empty array as a placeholder
+                // In a real implementation, this would read from stdin
+                if args.is_empty() {
+                    // Read a single byte/integer
+                    use std::io::{self, BufRead};
+                    let stdin = io::stdin();
+                    let mut line = String::new();
+
+                    if stdin.lock().read_line(&mut line).is_ok() {
+                        let trimmed = line.trim();
+                        if let Ok(num) = trimmed.parse::<i64>() {
+                            return Ok(Value::Integer(num));
+                        }
+                    }
+
+                    // Return 0 if reading fails or no input
+                    Ok(Value::Integer(0))
+                } else {
+                    // Read an array (not fully implemented)
+                    // For now, return an empty array
+                    Ok(Value::Array(Vec::new()))
+                }
             }
 
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name))),

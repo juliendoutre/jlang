@@ -7,6 +7,7 @@ EMPTY = {}
 // Defining a set by expliciting its elements.
 SINGLE = { 0 }
 SMALL = { 0, 1, 2, 3 }
+BOOL = { 0, 1 }
 
 // Defining a set for with an inclusive range.
 // The step is the difference between the two first items.

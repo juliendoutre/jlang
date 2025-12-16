@@ -39,6 +39,43 @@ impl PrettyPrinter {
                 println!("{}Variable Assignment: {} = ", self.indent(), name);
                 self.print_expr(value, self.indent + 1);
             }
+            Statement::TypedAssignment {
+                name,
+                type_expr,
+                value,
+            } => {
+                println!("{}Typed Assignment: {}: ", self.indent(), name);
+                self.print_expr(type_expr, self.indent + 1);
+                println!("{}  = ", self.indent());
+                self.print_expr(value, self.indent + 1);
+            }
+            Statement::FunctionDefinition {
+                name,
+                params,
+                returns,
+                body,
+            } => {
+                println!("{}Function Definition: {}", self.indent(), name);
+                println!("{}  Parameters:", self.indent());
+                for param in params {
+                    if let Some(type_expr) = &param.type_expr {
+                        print!("{}    {}: ", self.indent(), param.name);
+                        self.print_expr(type_expr, 0);
+                    } else {
+                        println!("{}    {}", self.indent(), param.name);
+                    }
+                }
+                println!("{}  Returns:", self.indent());
+                for ret in returns {
+                    if let Some(type_expr) = &ret.type_expr {
+                        print!("{}    {}: ", self.indent(), ret.name);
+                        self.print_expr(type_expr, 0);
+                    } else {
+                        println!("{}    {}", self.indent(), ret.name);
+                    }
+                }
+                println!("{}  Body: {} statements", self.indent(), body.len());
+            }
             Statement::ExpressionStatement(expr) => {
                 println!("{}Expression Statement:", self.indent());
                 self.print_expr(expr, self.indent + 1);
@@ -58,6 +95,9 @@ impl PrettyPrinter {
             }
             Expr::Integer(n) => {
                 println!("{}Integer({})", indent_str, n);
+            }
+            Expr::Character(c) => {
+                println!("{}Character('{}') [UTF-8: {}]", indent_str, c, *c as u32);
             }
             Expr::ExplicitSet(elements) => {
                 if elements.is_empty() {
@@ -114,6 +154,14 @@ impl PrettyPrinter {
                     }
                     println!("{})", indent_str);
                 }
+            }
+            Expr::ArrayType { size, element_type } => {
+                println!("{}Array Type [", indent_str);
+                print!("{}  size: ", indent_str);
+                self.print_expr(size, 0);
+                print!("{}  element: ", indent_str);
+                self.print_expr(element_type, 0);
+                println!("{}]", indent_str);
             }
         }
     }
