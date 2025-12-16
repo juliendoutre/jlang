@@ -14,6 +14,10 @@ impl Position {
 /// Token types for the language
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {
+    // Keywords
+    For,
+    In,
+
     // Literals
     Identifier(String),
     Integer(i64),

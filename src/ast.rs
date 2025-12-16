@@ -46,19 +46,27 @@ pub enum Expr {
 
     /// Type-constrained expression: n: BYTE
     /// Used in array sizes and other contexts where a value has a type constraint
-    TypeConstrained {
-        name: String,
-        type_expr: Box<Expr>,
-    },
+    TypeConstrained { name: String, type_expr: Box<Expr> },
 
     /// Array indexing: array[index]
-    Index {
-        array: Box<Expr>,
-        index: Box<Expr>,
-    },
+    Index { array: Box<Expr>, index: Box<Expr> },
 
     /// Array literal: [1, 2, 3]
     ArrayLiteral(Vec<Expr>),
+
+    /// Array range: [0, 1, ..., n]
+    ArrayRange {
+        start: Box<Expr>,
+        step: Option<Box<Expr>>,
+        end: Box<Expr>,
+    },
+
+    /// Array slice: array[start:end], array[:end], array[start:], array[:]
+    Slice {
+        array: Box<Expr>,
+        start: Option<Box<Expr>>,
+        end: Option<Box<Expr>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,6 +110,13 @@ pub enum Statement {
 
     /// Return statement: return value
     Return(Expr),
+
+    /// For loop: for x in array { body }
+    For {
+        variable: String,
+        iterable: Expr,
+        body: Vec<Statement>,
+    },
 
     /// Comment or empty line (we'll keep these for completeness)
     Empty,

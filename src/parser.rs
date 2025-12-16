@@ -92,6 +92,46 @@ where
         match self.peek() {
             None => Ok(Statement::Empty),
             Some(token) => match &token.token_type {
+                TokenType::For => {
+                    self.advance(); // consume 'for'
+
+                    // Parse loop variable
+                    let variable = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::Identifier(name),
+                            ..
+                        }) => name,
+                        _ => return Err(ParseError::new("Expected identifier after 'for'")),
+                    };
+
+                    // Expect 'in'
+                    match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::In,
+                            ..
+                        }) => {}
+                        _ => return Err(ParseError::new("Expected 'in' after loop variable")),
+                    }
+
+                    // Parse iterable expression
+                    let iterable = self.parse_expression()?;
+
+                    // Expect '{'
+                    self.skip_newlines();
+                    self.expect(TokenType::LeftBrace)?;
+
+                    // Parse body
+                    let body = self.parse_function_body()?;
+
+                    // Expect '}'
+                    self.expect(TokenType::RightBrace)?;
+
+                    Ok(Statement::For {
+                        variable,
+                        iterable,
+                        body,
+                    })
+                }
                 TokenType::Identifier(name) => {
                     let name = name.clone();
                     self.advance();
@@ -402,8 +442,8 @@ where
             }
 
             // Parse statements - try normal statement parsing first,
-            // but if it starts with a non-identifier, treat as expression statement
-            let stmt = if matches!(token.token_type, TokenType::Identifier(_)) {
+            // but if it starts with a non-identifier/non-keyword, treat as expression statement
+            let stmt = if matches!(token.token_type, TokenType::Identifier(_) | TokenType::For) {
                 self.parse_statement()?
             } else {
                 // Treat as expression statement
@@ -493,7 +533,7 @@ where
         Ok(left)
     }
 
-    /// Parse postfix expressions (array indexing, etc.)
+    /// Parse postfix expressions (array indexing, slicing, etc.)
     fn parse_postfix_expr(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_primary_expr()?;
 
@@ -504,12 +544,74 @@ where
                     ..
                 }) => {
                     self.advance(); // consume [
-                    let index = self.parse_expression()?;
-                    self.expect(TokenType::RightBracket)?;
-                    expr = Expr::Index {
-                        array: Box::new(expr),
-                        index: Box::new(index),
-                    };
+
+                    // Check for slice starting with colon: array[:]
+                    if let Some(Token {
+                        token_type: TokenType::Colon,
+                        ..
+                    }) = self.peek()
+                    {
+                        self.advance(); // consume :
+
+                        // Check if there's an end expression
+                        let end = if matches!(
+                            self.peek(),
+                            Some(Token {
+                                token_type: TokenType::RightBracket,
+                                ..
+                            })
+                        ) {
+                            None
+                        } else {
+                            Some(Box::new(self.parse_expression()?))
+                        };
+
+                        self.expect(TokenType::RightBracket)?;
+                        expr = Expr::Slice {
+                            array: Box::new(expr),
+                            start: None,
+                            end,
+                        };
+                    } else {
+                        // Parse first expression (could be index or slice start)
+                        let first = self.parse_expression()?;
+
+                        // Check for colon (slice)
+                        if let Some(Token {
+                            token_type: TokenType::Colon,
+                            ..
+                        }) = self.peek()
+                        {
+                            self.advance(); // consume :
+
+                            // Check if there's an end expression
+                            let end = if matches!(
+                                self.peek(),
+                                Some(Token {
+                                    token_type: TokenType::RightBracket,
+                                    ..
+                                })
+                            ) {
+                                None
+                            } else {
+                                Some(Box::new(self.parse_expression()?))
+                            };
+
+                            self.expect(TokenType::RightBracket)?;
+                            expr = Expr::Slice {
+                                array: Box::new(expr),
+                                start: Some(Box::new(first)),
+                                end,
+                            };
+                        } else {
+                            // Regular indexing
+                            self.expect(TokenType::RightBracket)?;
+                            expr = Expr::Index {
+                                array: Box::new(expr),
+                                index: Box::new(first),
+                            };
+                        }
+                    }
                 }
                 _ => break,
             }
@@ -595,6 +697,7 @@ where
                 }
 
                 // Must be array literal with multiple elements: [a, b, c]
+                // Or array range: [0, 1, ..., n]
                 if !matches!(
                     self.peek(),
                     Some(Token {
@@ -605,20 +708,107 @@ where
                     return Err(ParseError::new("Expected ',' or ']' in array"));
                 }
 
-                let mut elements = vec![first];
-                while matches!(
-                    self.peek(),
+                self.advance(); // consume comma
+
+                // Check for range pattern: [start, ...] or [start, step, ...]
+                if let Some(Token {
+                    token_type: TokenType::Ellipsis,
+                    ..
+                }) = self.peek()
+                {
+                    // Range with implicit step: [0, ..., 10]
+                    self.advance(); // consume ...
+
+                    // Optional comma before end
+                    if let Some(Token {
+                        token_type: TokenType::Comma,
+                        ..
+                    }) = self.peek()
+                    {
+                        self.advance();
+                    }
+
+                    let end_elem = self.parse_expression()?;
+                    self.expect(TokenType::RightBracket)?;
+
+                    return Ok(Expr::ArrayRange {
+                        start: Box::new(first),
+                        step: None,
+                        end: Box::new(end_elem),
+                    });
+                }
+
+                // Parse second element
+                let second = self.parse_expression()?;
+
+                // Check what comes after second element
+                match self.peek() {
                     Some(Token {
                         token_type: TokenType::Comma,
                         ..
-                    })
-                ) {
-                    self.advance(); // consume comma
-                    elements.push(self.parse_expression()?);
-                }
+                    }) => {
+                        self.advance(); // consume comma
 
-                self.expect(TokenType::RightBracket)?;
-                Ok(Expr::ArrayLiteral(elements))
+                        // Check for ellipsis (explicit step range)
+                        if let Some(Token {
+                            token_type: TokenType::Ellipsis,
+                            ..
+                        }) = self.peek()
+                        {
+                            self.advance(); // consume ...
+
+                            // Optional comma before end
+                            if let Some(Token {
+                                token_type: TokenType::Comma,
+                                ..
+                            }) = self.peek()
+                            {
+                                self.advance();
+                            }
+
+                            let end_elem = self.parse_expression()?;
+                            self.expect(TokenType::RightBracket)?;
+
+                            return Ok(Expr::ArrayRange {
+                                start: Box::new(first),
+                                step: Some(Box::new(second)),
+                                end: Box::new(end_elem),
+                            });
+                        }
+
+                        // Not a range, continue parsing as regular array literal
+                        let mut elements = vec![first, second];
+                        loop {
+                            elements.push(self.parse_expression()?);
+
+                            match self.peek() {
+                                Some(Token {
+                                    token_type: TokenType::Comma,
+                                    ..
+                                }) => {
+                                    self.advance();
+                                }
+                                Some(Token {
+                                    token_type: TokenType::RightBracket,
+                                    ..
+                                }) => {
+                                    self.advance();
+                                    break;
+                                }
+                                _ => return Err(ParseError::new("Expected ',' or ']' in array")),
+                            }
+                        }
+                        Ok(Expr::ArrayLiteral(elements))
+                    }
+                    Some(Token {
+                        token_type: TokenType::RightBracket,
+                        ..
+                    }) => {
+                        self.advance();
+                        Ok(Expr::ArrayLiteral(vec![first, second]))
+                    }
+                    _ => Err(ParseError::new("Expected ',' or ']' in array")),
+                }
             }
             Some(token) => Err(ParseError::new(format!(
                 "Unexpected token in expression: {:?}",

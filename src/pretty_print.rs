@@ -84,6 +84,17 @@ impl PrettyPrinter {
                 println!("{}Return:", self.indent());
                 self.print_expr(expr, self.indent + 1);
             }
+            Statement::For {
+                variable,
+                iterable,
+                body,
+            } => {
+                println!("{}For Loop:", self.indent());
+                println!("{}  variable: {}", self.indent(), variable);
+                println!("{}  iterable:", self.indent());
+                self.print_expr(iterable, self.indent + 2);
+                println!("{}  body: {} statements", self.indent(), body.len());
+            }
             Statement::Empty => {
                 println!("{}Empty", self.indent());
             }
@@ -187,6 +198,37 @@ impl PrettyPrinter {
                         self.print_expr(elem, indent + 1);
                     }
                     println!("{}]", indent_str);
+                }
+            }
+            Expr::ArrayRange { start, step, end } => {
+                println!("{}Array Range [", indent_str);
+                print!("{}  start: ", indent_str);
+                self.print_expr(start, 0);
+                if let Some(step) = step {
+                    print!("{}  step: ", indent_str);
+                    self.print_expr(step, 0);
+                } else {
+                    println!("{}  step: implicit (1)", indent_str);
+                }
+                print!("{}  end: ", indent_str);
+                self.print_expr(end, 0);
+                println!("{}]", indent_str);
+            }
+            Expr::Slice { array, start, end } => {
+                println!("{}Array Slice:", indent_str);
+                print!("{}  array: ", indent_str);
+                self.print_expr(array, 0);
+                if let Some(start_expr) = start {
+                    print!("{}  start: ", indent_str);
+                    self.print_expr(start_expr, 0);
+                } else {
+                    println!("{}  start: implicit (0)", indent_str);
+                }
+                if let Some(end_expr) = end {
+                    print!("{}  end: ", indent_str);
+                    self.print_expr(end_expr, 0);
+                } else {
+                    println!("{}  end: implicit (length)", indent_str);
                 }
             }
         }

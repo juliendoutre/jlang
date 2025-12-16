@@ -217,7 +217,13 @@ impl<'a> Lexer<'a> {
             }
             Some(ch) if ch.is_alphabetic() => {
                 let identifier = self.parse_identifier(ch);
-                Token::new(TokenType::Identifier(identifier), position)
+                // Check for keywords
+                let token_type = match identifier.as_str() {
+                    "for" => TokenType::For,
+                    "in" => TokenType::In,
+                    _ => TokenType::Identifier(identifier),
+                };
+                Token::new(token_type, position)
             }
             Some(ch) if ch.is_ascii_digit() => {
                 let number = self.parse_number(ch);

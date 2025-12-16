@@ -144,23 +144,25 @@ impl Interpreter {
                         args,
                     },
                 ) = (type_expr, value)
-                    && func_name == "in" && args.is_empty() {
-                        // Special handling for reading arrays
-                        let size_val = self.eval_expr(size)?;
-                        let array_size = match size_val {
-                            Value::Integer(n) => n as usize,
-                            _ => {
-                                return Err(RuntimeError::new(
-                                    "Array size must be an integer".to_string(),
-                                ));
-                            }
-                        };
+                    && func_name == "in"
+                    && args.is_empty()
+                {
+                    // Special handling for reading arrays
+                    let size_val = self.eval_expr(size)?;
+                    let array_size = match size_val {
+                        Value::Integer(n) => n as usize,
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "Array size must be an integer".to_string(),
+                            ));
+                        }
+                    };
 
-                        // Read array_size values from stdin
-                        let arr = self.read_array_from_stdin(array_size)?;
-                        self.env.define(name.clone(), Value::Array(arr));
-                        return Ok(());
-                    }
+                    // Read array_size values from stdin
+                    let arr = self.read_array_from_stdin(array_size)?;
+                    self.env.define(name.clone(), Value::Array(arr));
+                    return Ok(());
+                }
 
                 // Evaluate the type expression (for validation or size info)
                 let _type_val = self.eval_expr(type_expr)?;
@@ -193,6 +195,57 @@ impl Interpreter {
                 // For now, just evaluate the expression
                 // The actual return is handled in call_function
                 self.eval_expr(expr)?;
+            }
+            Statement::For {
+                variable,
+                iterable,
+                body,
+            } => {
+                // Evaluate the iterable
+                let iterable_val = self.eval_expr(iterable)?;
+
+                // Save the current value of the loop variable if it exists
+                let saved_value = self.env.bindings.get(variable).cloned();
+
+                // Iterate over the values
+                match iterable_val {
+                    Value::Array(arr) => {
+                        for elem in arr {
+                            // Bind the loop variable
+                            self.env.define(variable.clone(), Value::Integer(elem));
+
+                            // Execute the loop body
+                            for stmt in body {
+                                self.execute_statement(stmt)?;
+                            }
+                        }
+                    }
+                    Value::Set(set) => {
+                        // Convert set to sorted vector for consistent iteration
+                        let mut elements: Vec<_> = set.into_iter().collect();
+                        elements.sort();
+
+                        for elem in elements {
+                            // Bind the loop variable
+                            self.env.define(variable.clone(), Value::Integer(elem));
+
+                            // Execute the loop body
+                            for stmt in body {
+                                self.execute_statement(stmt)?;
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "Can only iterate over arrays and sets".to_string(),
+                        ));
+                    }
+                }
+
+                // Restore the original value of the loop variable
+                if let Some(saved) = saved_value {
+                    self.env.define(variable.clone(), saved);
+                }
             }
             Statement::Empty => {}
         }
@@ -453,6 +506,137 @@ impl Interpreter {
                 }
                 Ok(Value::Array(arr))
             }
+
+            Expr::ArrayRange { start, step, end } => {
+                let start_val = match self.eval_expr(start)? {
+                    Value::Integer(i) => i,
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "Array range start must be an integer".to_string(),
+                        ));
+                    }
+                };
+
+                let end_val = match self.eval_expr(end)? {
+                    Value::Integer(i) => i,
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "Array range end must be an integer".to_string(),
+                        ));
+                    }
+                };
+
+                let step_val = if let Some(step_expr) = step {
+                    match self.eval_expr(step_expr)? {
+                        Value::Integer(i) => i - start_val,
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "Array range step must be an integer".to_string(),
+                            ));
+                        }
+                    }
+                } else {
+                    // Infer step direction from start and end
+                    if start_val <= end_val { 1 } else { -1 }
+                };
+
+                if step_val == 0 {
+                    return Err(RuntimeError::new(
+                        "Array range step cannot be zero".to_string(),
+                    ));
+                }
+
+                let mut arr = Vec::new();
+                let mut current = start_val;
+
+                if step_val > 0 {
+                    while current <= end_val {
+                        arr.push(current);
+                        current += step_val;
+                    }
+                } else {
+                    while current >= end_val {
+                        arr.push(current);
+                        current += step_val;
+                    }
+                }
+
+                Ok(Value::Array(arr))
+            }
+
+            Expr::Slice { array, start, end } => {
+                let array_val = self.eval_expr(array)?;
+
+                match array_val {
+                    Value::Array(arr) => {
+                        let len = arr.len();
+
+                        let start_idx = if let Some(start_expr) = start {
+                            match self.eval_expr(start_expr)? {
+                                Value::Integer(i) => {
+                                    if i < 0 {
+                                        return Err(RuntimeError::new(
+                                            "Slice start index cannot be negative".to_string(),
+                                        ));
+                                    }
+                                    i as usize
+                                }
+                                _ => {
+                                    return Err(RuntimeError::new(
+                                        "Slice start must be an integer".to_string(),
+                                    ));
+                                }
+                            }
+                        } else {
+                            0
+                        };
+
+                        let end_idx = if let Some(end_expr) = end {
+                            match self.eval_expr(end_expr)? {
+                                Value::Integer(i) => {
+                                    if i < 0 {
+                                        return Err(RuntimeError::new(
+                                            "Slice end index cannot be negative".to_string(),
+                                        ));
+                                    }
+                                    i as usize
+                                }
+                                _ => {
+                                    return Err(RuntimeError::new(
+                                        "Slice end must be an integer".to_string(),
+                                    ));
+                                }
+                            }
+                        } else {
+                            len
+                        };
+
+                        if start_idx > len {
+                            return Err(RuntimeError::new(format!(
+                                "Slice start index {} out of bounds (array length: {})",
+                                start_idx, len
+                            )));
+                        }
+
+                        if end_idx > len {
+                            return Err(RuntimeError::new(format!(
+                                "Slice end index {} out of bounds (array length: {})",
+                                end_idx, len
+                            )));
+                        }
+
+                        if start_idx > end_idx {
+                            return Err(RuntimeError::new(format!(
+                                "Slice start index {} is greater than end index {}",
+                                start_idx, end_idx
+                            )));
+                        }
+
+                        Ok(Value::Array(arr[start_idx..end_idx].to_vec()))
+                    }
+                    _ => Err(RuntimeError::new("Can only slice arrays".to_string())),
+                }
+            }
         }
     }
 
@@ -494,6 +678,24 @@ impl Interpreter {
                     Value::Integer(_) | Value::Type(_) | Value::Function { .. } => Err(
                         RuntimeError::new("card() expects a set or array argument".to_string()),
                     ),
+                }
+            }
+
+            "len" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::new(format!(
+                        "len() expects 1 argument, got {}",
+                        args.len()
+                    )));
+                }
+                let arg = self.eval_expr(&args[0])?;
+                match arg {
+                    Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
+                    Value::Set(_) | Value::Integer(_) | Value::Type(_) | Value::Function { .. } => {
+                        Err(RuntimeError::new(
+                            "len() expects an array argument".to_string(),
+                        ))
+                    }
                 }
             }
 
