@@ -133,6 +133,37 @@ impl Interpreter {
                 type_expr,
                 value,
             } => {
+                // Check if this is an array type with in() call
+                if let (
+                    Expr::ArrayType {
+                        size,
+                        element_type: _,
+                    },
+                    Expr::FunctionCall {
+                        name: func_name,
+                        args,
+                    },
+                ) = (type_expr, value)
+                {
+                    if func_name == "in" && args.is_empty() {
+                        // Special handling for reading arrays
+                        let size_val = self.eval_expr(size)?;
+                        let array_size = match size_val {
+                            Value::Integer(n) => n as usize,
+                            _ => {
+                                return Err(RuntimeError::new(
+                                    "Array size must be an integer".to_string(),
+                                ));
+                            }
+                        };
+
+                        // Read array_size values from stdin
+                        let arr = self.read_array_from_stdin(array_size)?;
+                        self.env.define(name.clone(), Value::Array(arr));
+                        return Ok(());
+                    }
+                }
+
                 // Evaluate the type expression (for validation or size info)
                 let _type_val = self.eval_expr(type_expr)?;
 
@@ -189,7 +220,10 @@ impl Interpreter {
                         Value::Integer(i) => {
                             set.insert(i);
                         }
-                        Value::Set(_) | Value::Array(_) | Value::Type(_) | Value::Function { .. } => {
+                        Value::Set(_)
+                        | Value::Array(_)
+                        | Value::Type(_)
+                        | Value::Function { .. } => {
                             return Err(RuntimeError::new(
                                 "Cannot have sets, arrays, types, or functions as elements of a set"
                                     .to_string(),
@@ -370,11 +404,10 @@ impl Interpreter {
             Expr::TypeConstrained { name, type_expr } => {
                 // Evaluate the type expression (for validation)
                 let _type_val = self.eval_expr(type_expr)?;
-                
+
                 // Return the identifier's value
                 // In array sizes, this acts like a constrained identifier
-                Ok(Expr::Identifier(name.clone()))
-                    .and_then(|expr| self.eval_expr(&expr))
+                Ok(Expr::Identifier(name.clone())).and_then(|expr| self.eval_expr(&expr))
             }
 
             Expr::Index { array, index } => {
@@ -387,12 +420,11 @@ impl Interpreter {
                 };
 
                 match array_val {
-                    Value::Array(arr) => {
-                        arr.get(idx)
-                            .copied()
-                            .map(Value::Integer)
-                            .ok_or_else(|| RuntimeError::new("Index out of bounds".to_string()))
-                    }
+                    Value::Array(arr) => arr
+                        .get(idx)
+                        .copied()
+                        .map(Value::Integer)
+                        .ok_or_else(|| RuntimeError::new("Index out of bounds".to_string())),
                     Value::Set(set) => {
                         // For sets, treat indexing as element selection
                         let mut elements: Vec<_> = set.iter().copied().collect();
@@ -417,11 +449,31 @@ impl Interpreter {
                         _ => {
                             return Err(RuntimeError::new(
                                 "Array elements must be integers".to_string(),
-                            ))
+                            ));
                         }
                     }
                 }
                 Ok(Value::Array(arr))
+            }
+        }
+    }
+
+    /// Read an array of values from stdin
+    fn read_array_from_stdin(&mut self, size: usize) -> Result<Vec<i64>> {
+        use std::io::{self, Read};
+
+        let stdin = io::stdin();
+        let mut buffer = vec![0u8; size];
+
+        // Read exactly 'size' bytes
+        match stdin.lock().read_exact(&mut buffer) {
+            Ok(()) => {
+                // Convert bytes to i64 values
+                Ok(buffer.into_iter().map(|b| b as i64).collect())
+            }
+            Err(_) => {
+                // If we can't read enough bytes, return zeros
+                Ok(vec![0; size])
             }
         }
     }
@@ -441,11 +493,9 @@ impl Interpreter {
                 match arg {
                     Value::Set(set) => Ok(Value::Integer(set.len() as i64)),
                     Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
-                    Value::Integer(_) | Value::Type(_) | Value::Function { .. } => {
-                        Err(RuntimeError::new(
-                            "card() expects a set or array argument".to_string(),
-                        ))
-                    }
+                    Value::Integer(_) | Value::Type(_) | Value::Function { .. } => Err(
+                        RuntimeError::new("card() expects a set or array argument".to_string()),
+                    ),
                 }
             }
 
@@ -539,7 +589,8 @@ impl Interpreter {
                                     // Last expression statement is implicitly returned
                                     result = self.eval_expr(expr)?;
                                 }
-                                Statement::Assignment { name, value } | Statement::Definition { name, value } => {
+                                Statement::Assignment { name, value }
+                                | Statement::Definition { name, value } => {
                                     let val = self.eval_expr(value)?;
                                     self.env.define(name.clone(), val.clone());
                                     if is_last {
@@ -559,10 +610,7 @@ impl Interpreter {
 
                         Ok(result)
                     }
-                    _ => Err(RuntimeError::new(format!(
-                        "{} is not a function",
-                        name
-                    ))),
+                    _ => Err(RuntimeError::new(format!("{} is not a function", name))),
                 }
             }
         }

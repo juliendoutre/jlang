@@ -32,18 +32,18 @@ fn main() {
                 println!("\n=== Abstract Syntax Tree ===\n");
                 let mut printer = PrettyPrinter::new();
                 printer.print_program(&program);
-            }
+            } else {
+                println!("\n=== Executing Program ===\n");
 
-            println!("\n=== Executing Program ===\n");
-
-            let mut interpreter = Interpreter::new();
-            match interpreter.execute(&program) {
-                Ok(()) => {
-                    println!("\n✓ Program executed successfully!");
-                }
-                Err(err) => {
-                    eprintln!("\n✗ Runtime error: {}", err.message);
-                    std::process::exit(1);
+                let mut interpreter = Interpreter::new();
+                match interpreter.execute(&program) {
+                    Ok(()) => {
+                        println!("\n✓ Program executed successfully!");
+                    }
+                    Err(err) => {
+                        eprintln!("\n✗ Runtime error: {}", err.message);
+                        std::process::exit(1);
+                    }
                 }
             }
         }
