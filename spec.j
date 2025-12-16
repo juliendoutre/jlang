@@ -28,11 +28,12 @@ ODD = BYTE - EVEN
 
 // Applying a function to a set and saving the result to a variable.
 // `card` is a builtin function returning the cardinality (number of elements) in a set.
-a = card(A)
+a = card(B)
 
 // Setting a variable to a litteral value.
 b = 100 
 
 // Applying a function to a variable.
 // `out` is a builtin function printing out the value to the standard output.
+out(a)
 out(b)
