@@ -260,9 +260,70 @@ where
             ..
         }) = self.peek()
         {
-            // Array type: [n]BYTE
+            // Array type: [n]BYTE or [n: BYTE]BYTE or [2*n]BYTE
             self.advance(); // consume [
-            let size = self.parse_expression()?;
+
+            // Check if this is a type-constrained size: [n: BYTE]
+            let size = if let Some(Token {
+                token_type: TokenType::Identifier(name),
+                ..
+            }) = self.peek()
+            {
+                let name = name.clone();
+                self.advance(); // consume identifier
+
+                // Check for colon (type constraint)
+                if let Some(Token {
+                    token_type: TokenType::Colon,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance(); // consume :
+                    let type_expr = self.parse_array_size_type_expr()?;
+                    Expr::TypeConstrained {
+                        name,
+                        type_expr: Box::new(type_expr),
+                    }
+                } else {
+                    // No colon, so it's just an identifier
+                    // Put it back and parse as expression
+                    // We need to parse the rest of the expression
+                    let mut left = Expr::Identifier(name);
+
+                    // Check for binary operators
+                    while let Some(token) = self.peek() {
+                        match &token.token_type {
+                            TokenType::Plus
+                            | TokenType::Minus
+                            | TokenType::Star
+                            | TokenType::Percent => {
+                                let op = match &token.token_type {
+                                    TokenType::Plus => BinaryOperator::Add,
+                                    TokenType::Minus => BinaryOperator::Subtract,
+                                    TokenType::Star => BinaryOperator::Multiply,
+                                    TokenType::Percent => BinaryOperator::Modulo,
+                                    _ => unreachable!(),
+                                };
+                                self.advance();
+                                let right = self.parse_primary_expr()?;
+                                left = Expr::BinaryOp {
+                                    op,
+                                    left: Box::new(left),
+                                    right: Box::new(right),
+                                };
+                            }
+                            TokenType::RightBracket => break,
+                            _ => break,
+                        }
+                    }
+
+                    left
+                }
+            } else {
+                // Not an identifier, parse as regular expression
+                self.parse_array_size_expr()?
+            };
+
             self.expect(TokenType::RightBracket)?;
             let element_type = self.parse_type_expr()?;
             Ok(Expr::ArrayType {
@@ -271,6 +332,62 @@ where
             })
         } else {
             self.parse_expression()
+        }
+    }
+
+    /// Parse an expression inside array size brackets (limited context)
+    fn parse_array_size_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_primary_expr()?;
+
+        // Handle binary operators in array size context
+        while let Some(token) = self.peek() {
+            match &token.token_type {
+                TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Percent => {
+                    let op = match &token.token_type {
+                        TokenType::Plus => BinaryOperator::Add,
+                        TokenType::Minus => BinaryOperator::Subtract,
+                        TokenType::Star => BinaryOperator::Multiply,
+                        TokenType::Percent => BinaryOperator::Modulo,
+                        _ => unreachable!(),
+                    };
+                    self.advance();
+                    let right = self.parse_primary_expr()?;
+                    left = Expr::BinaryOp {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    };
+                }
+                TokenType::RightBracket => break,
+                _ => break,
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse a type expression in array size context (after colon)
+    fn parse_array_size_type_expr(&mut self) -> Result<Expr, ParseError> {
+        // In [n: BYTE] context, just parse identifier or set
+        match self.peek() {
+            Some(Token {
+                token_type: TokenType::Identifier(name),
+                ..
+            }) => {
+                let name = name.clone();
+                self.advance();
+                Ok(Expr::Identifier(name))
+            }
+            Some(Token {
+                token_type: TokenType::LeftBrace,
+                ..
+            }) => {
+                self.advance();
+                self.parse_set_expr()
+            }
+            _ => Err(ParseError::new(
+                "Expected type expression after ':'".to_string(),
+            )),
         }
     }
 
@@ -284,25 +401,17 @@ where
                 break;
             }
 
-            // For now, just parse empty statements or comments
-            // The actual body implementation will come later
-            self.skip_newlines();
-            if matches!(
-                self.peek().map(|t| &t.token_type),
-                Some(TokenType::RightBrace)
-            ) {
-                break;
-            }
+            // Parse statements - try normal statement parsing first,
+            // but if it starts with a non-identifier, treat as expression statement
+            let stmt = if matches!(token.token_type, TokenType::Identifier(_)) {
+                self.parse_statement()?
+            } else {
+                // Treat as expression statement
+                let expr = self.parse_expression()?;
+                Statement::ExpressionStatement(expr)
+            };
 
-            // Skip everything until we find a newline or closing brace
-            while let Some(token) = self.peek() {
-                if matches!(token.token_type, TokenType::Newline | TokenType::RightBrace) {
-                    break;
-                }
-                self.advance();
-            }
-
-            body.push(Statement::Empty);
+            body.push(stmt);
             self.skip_newlines();
         }
 
@@ -346,12 +455,14 @@ where
 
     /// Parse binary expressions with precedence
     fn parse_binary_expr(&mut self, min_precedence: u8) -> Result<Expr, ParseError> {
-        let mut left = self.parse_primary_expr()?;
+        let mut left = self.parse_postfix_expr()?;
 
         while let Some(token) = self.peek() {
             let (op, precedence) = match &token.token_type {
                 TokenType::Minus => (BinaryOperator::Subtract, 1),
                 TokenType::Plus => (BinaryOperator::Add, 1),
+                TokenType::Star => (BinaryOperator::Multiply, 2),
+                TokenType::Slash => (BinaryOperator::Divide, 2),
                 TokenType::Percent => (BinaryOperator::Modulo, 2),
                 TokenType::DoubleEquals => (BinaryOperator::Equals, 0),
                 TokenType::LessThan => (BinaryOperator::LessThan, 0),
@@ -380,6 +491,31 @@ where
         }
 
         Ok(left)
+    }
+
+    /// Parse postfix expressions (array indexing, etc.)
+    fn parse_postfix_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_primary_expr()?;
+
+        loop {
+            match self.peek() {
+                Some(Token {
+                    token_type: TokenType::LeftBracket,
+                    ..
+                }) => {
+                    self.advance(); // consume [
+                    let index = self.parse_expression()?;
+                    self.expect(TokenType::RightBracket)?;
+                    expr = Expr::Index {
+                        array: Box::new(expr),
+                        index: Box::new(index),
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(expr)
     }
 
     /// Parse primary expressions
@@ -419,14 +555,70 @@ where
                 token_type: TokenType::LeftBracket,
                 ..
             }) => {
-                // Array type: [size]element_type
-                let size = self.parse_expression()?;
+                // [ is already consumed by the match
+
+                // Check for empty array literal
+                if let Some(Token {
+                    token_type: TokenType::RightBracket,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance();
+                    return Ok(Expr::ArrayLiteral(Vec::new()));
+                }
+
+                // Parse first element (might be size for array type or first element of literal)
+                let first = self.parse_expression()?;
+
+                // Check what comes next
+                if let Some(Token {
+                    token_type: TokenType::RightBracket,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance(); // consume ]
+                    // Check if this is array type: [size]Element
+                    if let Some(Token {
+                        token_type: TokenType::Identifier(_) | TokenType::LeftBracket,
+                        ..
+                    }) = self.peek()
+                    {
+                        let element_type = self.parse_type_expr()?;
+                        return Ok(Expr::ArrayType {
+                            size: Box::new(first),
+                            element_type: Box::new(element_type),
+                        });
+                    } else {
+                        // Single-element array literal
+                        return Ok(Expr::ArrayLiteral(vec![first]));
+                    }
+                }
+
+                // Must be array literal with multiple elements: [a, b, c]
+                if !matches!(
+                    self.peek(),
+                    Some(Token {
+                        token_type: TokenType::Comma,
+                        ..
+                    })
+                ) {
+                    return Err(ParseError::new("Expected ',' or ']' in array"));
+                }
+
+                let mut elements = vec![first];
+                while matches!(
+                    self.peek(),
+                    Some(Token {
+                        token_type: TokenType::Comma,
+                        ..
+                    })
+                ) {
+                    self.advance(); // consume comma
+                    elements.push(self.parse_expression()?);
+                }
+
                 self.expect(TokenType::RightBracket)?;
-                let element_type = self.parse_primary_expr()?;
-                Ok(Expr::ArrayType {
-                    size: Box::new(size),
-                    element_type: Box::new(element_type),
-                })
+                Ok(Expr::ArrayLiteral(elements))
             }
             Some(token) => Err(ParseError::new(format!(
                 "Unexpected token in expression: {:?}",

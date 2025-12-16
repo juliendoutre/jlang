@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOperator, Expr, Program, Statement};
+use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -13,6 +13,12 @@ pub enum Value {
     Array(Vec<i64>),
     /// A type (used for type constraints)
     Type(Box<Value>),
+    /// A function (stored with its definition)
+    Function {
+        params: Vec<Parameter>,
+        returns: Vec<Parameter>,
+        body: Vec<Statement>,
+    },
 }
 
 impl fmt::Display for Value {
@@ -42,6 +48,7 @@ impl fmt::Display for Value {
                 write!(f, "]")
             }
             Value::Type(inner) => write!(f, "Type({})", inner),
+            Value::Function { .. } => write!(f, "<function>"),
         }
     }
 }
@@ -138,16 +145,24 @@ impl Interpreter {
             }
             Statement::FunctionDefinition {
                 name,
-                params: _,
-                returns: _,
-                body: _,
+                params,
+                returns,
+                body,
             } => {
-                // For now, just skip function definitions
-                // We'll implement function calls later
-                // Store a placeholder
-                self.env.define(name.clone(), Value::Integer(0));
+                // Store the function definition
+                let func = Value::Function {
+                    params: params.clone(),
+                    returns: returns.clone(),
+                    body: body.clone(),
+                };
+                self.env.define(name.clone(), func);
             }
             Statement::ExpressionStatement(expr) => {
+                self.eval_expr(expr)?;
+            }
+            Statement::Return(expr) => {
+                // For now, just evaluate the expression
+                // The actual return is handled in call_function
                 self.eval_expr(expr)?;
             }
             Statement::Empty => {}
@@ -174,9 +189,9 @@ impl Interpreter {
                         Value::Integer(i) => {
                             set.insert(i);
                         }
-                        Value::Set(_) | Value::Array(_) | Value::Type(_) => {
+                        Value::Set(_) | Value::Array(_) | Value::Type(_) | Value::Function { .. } => {
                             return Err(RuntimeError::new(
-                                "Cannot have sets, arrays, or types as elements of a set"
+                                "Cannot have sets, arrays, types, or functions as elements of a set"
                                     .to_string(),
                             ));
                         }
@@ -297,6 +312,15 @@ impl Interpreter {
                     (BinaryOperator::Subtract, Value::Integer(a), Value::Integer(b)) => {
                         Ok(Value::Integer(a - b))
                     }
+                    (BinaryOperator::Multiply, Value::Integer(a), Value::Integer(b)) => {
+                        Ok(Value::Integer(a * b))
+                    }
+                    (BinaryOperator::Divide, Value::Integer(a), Value::Integer(b)) => {
+                        if b == 0 {
+                            return Err(RuntimeError::new("Division by zero".to_string()));
+                        }
+                        Ok(Value::Integer(a / b))
+                    }
                     (BinaryOperator::Modulo, Value::Integer(a), Value::Integer(b)) => {
                         if b == 0 {
                             return Err(RuntimeError::new("Division by zero".to_string()));
@@ -342,11 +366,69 @@ impl Interpreter {
                 // Return a type representation
                 Ok(Value::Type(Box::new(size_val)))
             }
+
+            Expr::TypeConstrained { name, type_expr } => {
+                // Evaluate the type expression (for validation)
+                let _type_val = self.eval_expr(type_expr)?;
+                
+                // Return the identifier's value
+                // In array sizes, this acts like a constrained identifier
+                Ok(Expr::Identifier(name.clone()))
+                    .and_then(|expr| self.eval_expr(&expr))
+            }
+
+            Expr::Index { array, index } => {
+                let array_val = self.eval_expr(array)?;
+                let index_val = self.eval_expr(index)?;
+
+                let idx = match index_val {
+                    Value::Integer(i) => i as usize,
+                    _ => return Err(RuntimeError::new("Index must be an integer".to_string())),
+                };
+
+                match array_val {
+                    Value::Array(arr) => {
+                        arr.get(idx)
+                            .copied()
+                            .map(Value::Integer)
+                            .ok_or_else(|| RuntimeError::new("Index out of bounds".to_string()))
+                    }
+                    Value::Set(set) => {
+                        // For sets, treat indexing as element selection
+                        let mut elements: Vec<_> = set.iter().copied().collect();
+                        elements.sort();
+                        elements
+                            .get(idx)
+                            .copied()
+                            .map(Value::Integer)
+                            .ok_or_else(|| RuntimeError::new("Index out of bounds".to_string()))
+                    }
+                    _ => Err(RuntimeError::new(
+                        "Can only index arrays and sets".to_string(),
+                    )),
+                }
+            }
+
+            Expr::ArrayLiteral(elements) => {
+                let mut arr = Vec::new();
+                for elem_expr in elements {
+                    match self.eval_expr(elem_expr)? {
+                        Value::Integer(i) => arr.push(i),
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "Array elements must be integers".to_string(),
+                            ))
+                        }
+                    }
+                }
+                Ok(Value::Array(arr))
+            }
         }
     }
 
-    /// Call a function (builtin for now)
+    /// Call a function (builtin or user-defined)
     fn call_function(&mut self, name: &str, args: &[Expr]) -> Result<Value> {
+        // Check for builtin functions first
         match name {
             "card" => {
                 if args.len() != 1 {
@@ -359,9 +441,11 @@ impl Interpreter {
                 match arg {
                     Value::Set(set) => Ok(Value::Integer(set.len() as i64)),
                     Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
-                    Value::Integer(_) | Value::Type(_) => Err(RuntimeError::new(
-                        "card() expects a set or array argument".to_string(),
-                    )),
+                    Value::Integer(_) | Value::Type(_) | Value::Function { .. } => {
+                        Err(RuntimeError::new(
+                            "card() expects a set or array argument".to_string(),
+                        ))
+                    }
                 }
             }
 
@@ -379,8 +463,6 @@ impl Interpreter {
 
             "in" => {
                 // Read from standard input
-                // For now, return an empty array as a placeholder
-                // In a real implementation, this would read from stdin
                 if args.is_empty() {
                     // Read a single byte/integer
                     use std::io::{self, BufRead};
@@ -403,7 +485,86 @@ impl Interpreter {
                 }
             }
 
-            _ => Err(RuntimeError::new(format!("Unknown function: {}", name))),
+            _ => {
+                // Try to call a user-defined function
+                let func_val = self.env.get(name)?;
+                match func_val {
+                    Value::Function {
+                        params,
+                        returns: _,
+                        body,
+                    } => {
+                        // Evaluate arguments
+                        let mut arg_values = Vec::new();
+                        for arg_expr in args {
+                            arg_values.push(self.eval_expr(arg_expr)?);
+                        }
+
+                        // Check argument count
+                        if arg_values.len() != params.len() {
+                            return Err(RuntimeError::new(format!(
+                                "Function {} expects {} arguments, got {}",
+                                name,
+                                params.len(),
+                                arg_values.len()
+                            )));
+                        }
+
+                        // Save current environment state
+                        let saved_bindings: Vec<_> = params
+                            .iter()
+                            .filter_map(|p| {
+                                self.env
+                                    .bindings
+                                    .get(&p.name)
+                                    .map(|v| (p.name.clone(), v.clone()))
+                            })
+                            .collect();
+
+                        // Bind parameters
+                        for (param, value) in params.iter().zip(arg_values.iter()) {
+                            self.env.define(param.name.clone(), value.clone());
+                        }
+
+                        // Execute function body
+                        let mut result = Value::Integer(0);
+                        for (i, stmt) in body.iter().enumerate() {
+                            let is_last = i == body.len() - 1;
+                            match stmt {
+                                Statement::Return(expr) => {
+                                    result = self.eval_expr(expr)?;
+                                    break;
+                                }
+                                Statement::ExpressionStatement(expr) if is_last => {
+                                    // Last expression statement is implicitly returned
+                                    result = self.eval_expr(expr)?;
+                                }
+                                Statement::Assignment { name, value } | Statement::Definition { name, value } => {
+                                    let val = self.eval_expr(value)?;
+                                    self.env.define(name.clone(), val.clone());
+                                    if is_last {
+                                        result = val;
+                                    }
+                                }
+                                _ => {
+                                    self.execute_statement(stmt)?;
+                                }
+                            }
+                        }
+
+                        // Restore environment
+                        for (name, value) in saved_bindings {
+                            self.env.define(name, value);
+                        }
+
+                        Ok(result)
+                    }
+                    _ => Err(RuntimeError::new(format!(
+                        "{} is not a function",
+                        name
+                    ))),
+                }
+            }
         }
     }
 }

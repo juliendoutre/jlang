@@ -133,21 +133,22 @@ impl<'a> Lexer<'a> {
 
         let position = self.position;
 
-        // Check for comment
+        // Check for comment or division
         if let Some(&ch) = self.peek()
             && ch == '/'
         {
             self.advance();
             if let Some(&next_ch) = self.peek() {
                 if next_ch == '/' {
-                    self.advance();
                     self.skip_comment();
                     return self.next_token(); // Recursively get the next token
                 } else {
-                    // Just a single slash - not supported yet, treat as error
-                    // For now, skip and continue
-                    return self.next_token();
+                    // Single slash - division operator
+                    return Token::new(TokenType::Slash, position);
                 }
+            } else {
+                // Slash at end of file
+                return Token::new(TokenType::Slash, position);
             }
         }
 
@@ -164,6 +165,7 @@ impl<'a> Lexer<'a> {
             Some(':') => Token::new(TokenType::Colon, position),
             Some('|') => Token::new(TokenType::Pipe, position),
             Some('+') => Token::new(TokenType::Plus, position),
+            Some('*') => Token::new(TokenType::Star, position),
             Some('%') => Token::new(TokenType::Percent, position),
             Some('<') => Token::new(TokenType::LessThan, position),
             Some('>') => Token::new(TokenType::GreaterThan, position),

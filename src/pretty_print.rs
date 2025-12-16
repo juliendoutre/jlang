@@ -80,6 +80,10 @@ impl PrettyPrinter {
                 println!("{}Expression Statement:", self.indent());
                 self.print_expr(expr, self.indent + 1);
             }
+            Statement::Return(expr) => {
+                println!("{}Return:", self.indent());
+                self.print_expr(expr, self.indent + 1);
+            }
             Statement::Empty => {
                 println!("{}Empty", self.indent());
             }
@@ -162,6 +166,28 @@ impl PrettyPrinter {
                 print!("{}  element: ", indent_str);
                 self.print_expr(element_type, 0);
                 println!("{}]", indent_str);
+            }
+            Expr::TypeConstrained { name, type_expr } => {
+                print!("{}{}: ", indent_str, name);
+                self.print_expr(type_expr, 0);
+            }
+            Expr::Index { array, index } => {
+                println!("{}Array Index:", indent_str);
+                print!("{}  array: ", indent_str);
+                self.print_expr(array, 0);
+                print!("{}  index: ", indent_str);
+                self.print_expr(index, 0);
+            }
+            Expr::ArrayLiteral(elements) => {
+                if elements.is_empty() {
+                    println!("{}Array Literal []", indent_str);
+                } else {
+                    println!("{}Array Literal [", indent_str);
+                    for elem in elements {
+                        self.print_expr(elem, indent + 1);
+                    }
+                    println!("{}]", indent_str);
+                }
             }
         }
     }

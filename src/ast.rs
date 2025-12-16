@@ -38,17 +38,35 @@ pub enum Expr {
     /// Function call: card(A), out(b), in()
     FunctionCall { name: String, args: Vec<Expr> },
 
-    /// Array type: [n]BYTE or [5]BYTE
+    /// Array type: [n]BYTE or [5]BYTE or [n: BYTE]BYTE
     ArrayType {
         size: Box<Expr>,
         element_type: Box<Expr>,
     },
+
+    /// Type-constrained expression: n: BYTE
+    /// Used in array sizes and other contexts where a value has a type constraint
+    TypeConstrained {
+        name: String,
+        type_expr: Box<Expr>,
+    },
+
+    /// Array indexing: array[index]
+    Index {
+        array: Box<Expr>,
+        index: Box<Expr>,
+    },
+
+    /// Array literal: [1, 2, 3]
+    ArrayLiteral(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOperator {
     Add,         // +
     Subtract,    // -
+    Multiply,    // *
+    Divide,      // /
     Equals,      // ==
     Modulo,      // %
     LessThan,    // <
@@ -81,6 +99,9 @@ pub enum Statement {
 
     /// Expression statement (function call): out(b)
     ExpressionStatement(Expr),
+
+    /// Return statement: return value
+    Return(Expr),
 
     /// Comment or empty line (we'll keep these for completeness)
     Empty,

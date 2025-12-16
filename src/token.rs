@@ -35,6 +35,8 @@ pub enum TokenType {
     DoubleEquals, // ==
     Plus,         // +
     Minus,        // -
+    Star,         // *
+    Slash,        // /
     Arrow,        // ->
     Ellipsis,     // ...
     Percent,      // %
