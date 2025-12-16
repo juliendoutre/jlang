@@ -144,8 +144,7 @@ impl Interpreter {
                         args,
                     },
                 ) = (type_expr, value)
-                {
-                    if func_name == "in" && args.is_empty() {
+                    && func_name == "in" && args.is_empty() {
                         // Special handling for reading arrays
                         let size_val = self.eval_expr(size)?;
                         let array_size = match size_val {
@@ -162,7 +161,6 @@ impl Interpreter {
                         self.env.define(name.clone(), Value::Array(arr));
                         return Ok(());
                     }
-                }
 
                 // Evaluate the type expression (for validation or size info)
                 let _type_val = self.eval_expr(type_expr)?;
