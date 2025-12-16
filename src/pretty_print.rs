@@ -4,6 +4,12 @@ pub struct PrettyPrinter {
     indent: usize,
 }
 
+impl Default for PrettyPrinter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PrettyPrinter {
     pub fn new() -> Self {
         Self { indent: 0 }

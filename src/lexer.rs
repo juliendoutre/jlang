@@ -103,8 +103,8 @@ impl<'a> Lexer<'a> {
         let position = self.position;
 
         // Check for comment
-        if let Some(&ch) = self.peek() {
-            if ch == '/' {
+        if let Some(&ch) = self.peek()
+            && ch == '/' {
                 self.advance();
                 if let Some(&next_ch) = self.peek() {
                     if next_ch == '/' {
@@ -118,7 +118,6 @@ impl<'a> Lexer<'a> {
                     }
                 }
             }
-        }
 
         match self.advance() {
             None => Token::new(TokenType::Eof, position),
