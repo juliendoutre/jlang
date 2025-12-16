@@ -56,7 +56,10 @@ where
     /// Expect a specific token type
     fn expect(&mut self, expected: TokenType) -> Result<Token, ParseError> {
         match self.advance() {
-            Some(token) if std::mem::discriminant(&token.token_type) == std::mem::discriminant(&expected) => {
+            Some(token)
+                if std::mem::discriminant(&token.token_type)
+                    == std::mem::discriminant(&expected) =>
+            {
                 Ok(token)
             }
             Some(token) => Err(ParseError::new(format!(
@@ -101,7 +104,7 @@ where
                         }) => {
                             self.advance(); // consume =
                             let value = self.parse_expression()?;
-                            
+
                             // Determine if it's a definition or assignment based on naming convention
                             // Uppercase = definition, lowercase = assignment
                             if name.chars().next().unwrap().is_uppercase() {
@@ -260,15 +263,15 @@ where
         // Look ahead to see if we have: x: Type or just elements
 
         let first_token = self.peek().cloned();
-        
+
         match first_token {
             Some(Token {
                 token_type: TokenType::Identifier(var_name),
                 ..
             }) => {
                 self.advance();
-                
-                // Check for : (implicit or constrained set)
+
+                // Check for : (implicit set with optional constraint)
                 if let Some(Token {
                     token_type: TokenType::Colon,
                     ..
@@ -276,28 +279,25 @@ where
                 {
                     self.advance(); // consume :
                     let type_expr = self.parse_expression()?;
-                    
+
                     // Check for | (constraint)
-                    if let Some(Token {
+                    let constraint = if let Some(Token {
                         token_type: TokenType::Pipe,
                         ..
                     }) = self.peek()
                     {
                         self.advance(); // consume |
-                        let constraint = self.parse_expression()?;
-                        self.expect(TokenType::RightBrace)?;
-                        Ok(Expr::ConstrainedSet {
-                            variable: var_name,
-                            type_expr: Box::new(type_expr),
-                            constraint: Box::new(constraint),
-                        })
+                        Some(Box::new(self.parse_expression()?))
                     } else {
-                        self.expect(TokenType::RightBrace)?;
-                        Ok(Expr::ImplicitSet {
-                            variable: var_name,
-                            type_expr: Box::new(type_expr),
-                        })
-                    }
+                        None
+                    };
+
+                    self.expect(TokenType::RightBrace)?;
+                    Ok(Expr::ImplicitSet {
+                        variable: var_name,
+                        type_expr: Box::new(type_expr),
+                        constraint,
+                    })
                 } else {
                     // It's an explicit set or range set, need to backtrack
                     let first_elem = Expr::Identifier(var_name);
@@ -320,7 +320,7 @@ where
                 ..
             }) => {
                 self.advance(); // consume ,
-                
+
                 // Check if next is ellipsis (implicit step range)
                 if let Some(Token {
                     token_type: TokenType::Ellipsis,
@@ -328,7 +328,7 @@ where
                 }) = self.peek()
                 {
                     self.advance(); // consume ...
-                    
+
                     // Might have comma before end
                     if let Some(Token {
                         token_type: TokenType::Comma,
@@ -337,27 +337,27 @@ where
                     {
                         self.advance();
                     }
-                    
+
                     let end_elem = self.parse_expression()?;
                     self.expect(TokenType::RightBrace)?;
-                    
+
                     return Ok(Expr::RangeSet {
                         start: Box::new(first_elem),
                         step: None,
                         end: Box::new(end_elem),
                     });
                 }
-                
+
                 // Otherwise, parse the second element
                 let second_elem = self.parse_expression()?;
-                
+
                 match self.peek() {
                     Some(Token {
                         token_type: TokenType::Comma,
                         ..
                     }) => {
                         self.advance(); // consume ,
-                        
+
                         // Check for ...
                         if let Some(Token {
                             token_type: TokenType::Ellipsis,
@@ -365,7 +365,7 @@ where
                         }) = self.peek()
                         {
                             self.advance(); // consume ...
-                            
+
                             // Might have comma before end
                             if let Some(Token {
                                 token_type: TokenType::Comma,
@@ -374,10 +374,10 @@ where
                             {
                                 self.advance();
                             }
-                            
+
                             let end_elem = self.parse_expression()?;
                             self.expect(TokenType::RightBrace)?;
-                            
+
                             Ok(Expr::RangeSet {
                                 start: Box::new(first_elem),
                                 step: Some(Box::new(second_elem)),
@@ -388,7 +388,7 @@ where
                             let mut elements = vec![first_elem, second_elem];
                             loop {
                                 elements.push(self.parse_expression()?);
-                                
+
                                 match self.peek() {
                                     Some(Token {
                                         token_type: TokenType::Comma,
@@ -403,11 +403,7 @@ where
                                         self.advance();
                                         break;
                                     }
-                                    _ => {
-                                        return Err(ParseError::new(
-                                            "Expected ',' or '}' in set",
-                                        ))
-                                    }
+                                    _ => return Err(ParseError::new("Expected ',' or '}' in set")),
                                 }
                             }
                             Ok(Expr::ExplicitSet(elements))
@@ -418,7 +414,7 @@ where
                         ..
                     }) => {
                         self.advance(); // consume ...
-                        
+
                         // Might have comma before end
                         if let Some(Token {
                             token_type: TokenType::Comma,
@@ -427,10 +423,10 @@ where
                         {
                             self.advance();
                         }
-                        
+
                         let end_elem = self.parse_expression()?;
                         self.expect(TokenType::RightBrace)?;
-                        
+
                         Ok(Expr::RangeSet {
                             start: Box::new(first_elem),
                             step: None,

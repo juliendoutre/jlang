@@ -49,6 +49,7 @@ impl PrettyPrinter {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn print_expr(&self, expr: &Expr, indent: usize) {
         let indent_str = "  ".repeat(indent);
         match expr {
@@ -86,20 +87,14 @@ impl PrettyPrinter {
             Expr::ImplicitSet {
                 variable,
                 type_expr,
+                constraint,
             } => {
                 println!("{}Implicit Set {{ {}: ", indent_str, variable);
                 self.print_expr(type_expr, indent + 1);
-                println!("{}}}", indent_str);
-            }
-            Expr::ConstrainedSet {
-                variable,
-                type_expr,
-                constraint,
-            } => {
-                println!("{}Constrained Set {{ {}: ", indent_str, variable);
-                self.print_expr(type_expr, indent + 1);
-                println!("{}  |", indent_str);
-                self.print_expr(constraint, indent + 1);
+                if let Some(constraint) = constraint {
+                    println!("{}  |", indent_str);
+                    self.print_expr(constraint, indent + 1);
+                }
                 println!("{}}}", indent_str);
             }
             Expr::BinaryOp { op, left, right } => {

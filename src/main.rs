@@ -15,15 +15,6 @@ fn main() {
     let filename = &args[1];
     let source = fs::read_to_string(filename).expect("Failed to read source file");
 
-    println!("=== Lexing ===");
-    let lexer = Lexer::new(&source);
-    let tokens: Vec<_> = lexer.collect();
-
-    for token in &tokens {
-        println!("{:?}", token);
-    }
-
-    println!("\n=== Parsing ===");
     let lexer = Lexer::new(&source);
     let mut parser = Parser::new(lexer);
 

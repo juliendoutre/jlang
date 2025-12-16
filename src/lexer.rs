@@ -104,20 +104,21 @@ impl<'a> Lexer<'a> {
 
         // Check for comment
         if let Some(&ch) = self.peek()
-            && ch == '/' {
-                self.advance();
-                if let Some(&next_ch) = self.peek() {
-                    if next_ch == '/' {
-                        self.advance();
-                        self.skip_comment();
-                        return self.next_token(); // Recursively get the next token
-                    } else {
-                        // Just a single slash - not supported yet, treat as error
-                        // For now, skip and continue
-                        return self.next_token();
-                    }
+            && ch == '/'
+        {
+            self.advance();
+            if let Some(&next_ch) = self.peek() {
+                if next_ch == '/' {
+                    self.advance();
+                    self.skip_comment();
+                    return self.next_token(); // Recursively get the next token
+                } else {
+                    // Just a single slash - not supported yet, treat as error
+                    // For now, skip and continue
+                    return self.next_token();
                 }
             }
+        }
 
         match self.advance() {
             None => Token::new(TokenType::Eof, position),
