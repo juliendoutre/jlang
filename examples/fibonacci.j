@@ -1,7 +1,7 @@
 // Defining a set for valid input numbers.
 N = { 0, ..., 30 }
 
-// Reading a number from standard input.
+// Reading a number from the standard input.
 n: N = stdin()
 
 // Defining a recursive function to compute the n-th Fibonacci number.

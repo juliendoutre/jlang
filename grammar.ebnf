@@ -1,0 +1,109 @@
+(* Program Structure *)
+program = { statement } ;
+
+statement = empty_statement
+          | for_statement
+          | if_statement
+          | definition
+          | assignment
+          | typed_assignment
+          | index_assignment
+          | function_definition
+          | expression_statement ;
+
+empty_statement = newline ;
+
+(* Control Flow *)
+for_statement = "for" identifier "in" expression "{" { statement } "}" ;
+
+if_statement = "if" expression "{" { statement } "}" ;
+
+(* Definitions and Assignments *)
+definition = uppercase_identifier "=" expression ;
+
+assignment = lowercase_identifier "=" expression ;
+
+typed_assignment = identifier ":" type_expr "=" expression ;
+
+index_assignment = identifier "[" expression "]" "=" expression ;
+
+function_definition = identifier "=" "(" parameters ")" "->" "(" parameters ")" "{" { statement "}" ;
+
+parameters = [ parameter { "," parameter } ] ;
+
+parameter = identifier [ ":" type_expr ] ;
+
+(* Type Expressions *)
+type_expr = array_type | expression ;
+
+array_type = "[" size_expr "]" type_expr ;
+
+size_expr = expression
+          | identifier ":" type_expr  (* type-constrained size *) ;
+
+(* Expressions *)
+expression = binary_expr ;
+
+binary_expr = postfix_expr { binary_operator postfix_expr } ;
+
+postfix_expr = primary_expr { postfix_operator } ;
+
+postfix_operator = "[" expression "]"                    (* indexing *)
+                 | "[" expression ":" [ expression ] "]" (* slicing with start *)
+                 | "[" ":" expression "]"                (* slicing without start *) ;
+
+primary_expr = integer
+             | character
+             | identifier
+             | function_call
+             | set_expr
+             | array_expr
+             | "(" expression ")" ;
+
+function_call = identifier "(" [ expression { "," expression } ] ")" ;
+
+(* Set Expressions *)
+set_expr = "{" "}"                                                        (* empty set *)
+         | "{" identifier ":" expression [ "|" expression ] "}"           (* implicit set *)
+         | "{" expression { "," expression } "}"                          (* explicit set *)
+         | "{" expression "," [ expression "," ] "..." "," expression "}" (* range set *) ;
+
+(* Array Expressions *)
+array_expr = "[" "]"                                                        (* empty array *)
+           | "[" expression { "," expression } "]"                          (* array literal *)
+           | "[" expression "," [ expression "," ] "..." "," expression "]" (* array range *) ;
+
+(* Operators *)
+binary_operator = "+" | "-" | "*" | "/" | "%"
+                | "==" | "<" | ">" | "<=" | ">="
+                | "&" | "|" ;
+
+(* Lexical Elements *)
+identifier = uppercase_identifier | lowercase_identifier ;
+
+uppercase_identifier = uppercase_letter { letter | digit | "_" } ;
+
+lowercase_identifier = lowercase_letter { letter | digit | "_" } ;
+
+integer = digit { digit } ;
+
+character = "'" printable_char "'" ;
+
+letter = uppercase_letter | lowercase_letter ;
+
+uppercase_letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"
+                 | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T"
+                 | "U" | "V" | "W" | "X" | "Y" | "Z" ;
+
+lowercase_letter = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j"
+                 | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t"
+                 | "u" | "v" | "w" | "x" | "y" | "z" ;
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+printable_char = ? any printable ASCII character ? ;
+
+newline = ? line feed character ? ;
+
+(* Comments *)
+comment = "//" { ? any character except newline ? } newline ;

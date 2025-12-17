@@ -4,7 +4,6 @@ BYTE = { 0, ..., 255 }
 // Reading 10 bytes from the standard input.
 input: [10]BYTE = stdin()
 
-
 // Initializing the sum to 0.
 sum = 0
 
