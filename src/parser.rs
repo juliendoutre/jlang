@@ -820,7 +820,7 @@ where
                         }
 
                         self.expect(TokenType::RightParen)?;
-                        return Ok(Expr::TupleLiteral { fields });
+                        Ok(Expr::TupleLiteral { fields })
                     } else {
                         // Not a tuple, it's a parenthesized expression starting with an identifier
                         // We've already consumed the identifier, so we need to build an expression from it

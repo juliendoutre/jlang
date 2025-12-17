@@ -2,13 +2,80 @@ use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement, UnaryOpera
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+/// Set representation supporting both materialized and lazy evaluation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SetValue {
+    /// Materialized set (for small sets or after operations)
+    Materialized(HashSet<i64>),
+    /// Range-based set (lazy evaluation)
+    Range { start: i64, end: i64, step: i64 },
+}
+
+impl SetValue {
+    /// Get the cardinality (size) of the set without materializing
+    fn cardinality(&self) -> Result<usize> {
+        match self {
+            SetValue::Materialized(set) => Ok(set.len()),
+            SetValue::Range { start, end, step } => {
+                if *step == 0 {
+                    return Err(RuntimeError::new(
+                        "Invalid range with zero step".to_string(),
+                    ));
+                }
+                if *step > 0 {
+                    if end >= start {
+                        Ok(((end - start) / step + 1) as usize)
+                    } else {
+                        Ok(0)
+                    }
+                } else if end <= start {
+                    Ok(((start - end) / (-step) + 1) as usize)
+                } else {
+                    Ok(0)
+                }
+            }
+        }
+    }
+
+    /// Materialize the set (only when absolutely necessary)
+    fn materialize(&self) -> Result<HashSet<i64>> {
+        match self {
+            SetValue::Materialized(set) => Ok(set.clone()),
+            SetValue::Range { start, end, step } => {
+                let size = self.cardinality()?;
+                if size > 1_000_000 {
+                    return Err(RuntimeError::new(format!(
+                        "Cannot materialize set with {} elements (too large)",
+                        size
+                    )));
+                }
+
+                let mut set = HashSet::new();
+                let mut current = *start;
+                if *step > 0 {
+                    while current <= *end {
+                        set.insert(current);
+                        current += step;
+                    }
+                } else {
+                    while current >= *end {
+                        set.insert(current);
+                        current += step;
+                    }
+                }
+                Ok(set)
+            }
+        }
+    }
+}
+
 /// Runtime values in the language
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     /// An integer value
     Integer(i64),
-    /// A set of integers
-    Set(HashSet<i64>),
+    /// A set of integers (lazy or materialized)
+    Set(SetValue),
     /// An array of integers
     Array(Vec<i64>),
     /// A type (used for type constraints)
@@ -27,18 +94,27 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Integer(i) => write!(f, "{}", i),
-            Value::Set(set) => {
-                let mut elements: Vec<_> = set.iter().collect();
-                elements.sort();
-                write!(f, "{{")?;
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+            Value::Set(set_val) => match set_val {
+                SetValue::Range { start, end, step } => {
+                    if *step == 1 {
+                        write!(f, "{{{}, ..., {}}}", start, end)
+                    } else {
+                        write!(f, "{{{}, {}, ..., {}}}", start, start + step, end)
                     }
-                    write!(f, "{}", elem)?;
                 }
-                write!(f, "}}")
-            }
+                SetValue::Materialized(set) => {
+                    let mut elements: Vec<_> = set.iter().collect();
+                    elements.sort();
+                    write!(f, "{{")?;
+                    for (i, elem) in elements.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", elem)?;
+                    }
+                    write!(f, "}}")
+                }
+            },
             Value::Array(arr) => {
                 write!(f, "[")?;
                 for (i, elem) in arr.iter().enumerate() {
@@ -284,7 +360,9 @@ impl Interpreter {
                             }
                         }
                     }
-                    Value::Set(set) => {
+                    Value::Set(set_val) => {
+                        // Materialize set for iteration
+                        let set = set_val.materialize()?;
                         // Convert set to sorted vector for consistent iteration
                         let mut elements: Vec<_> = set.into_iter().collect();
                         elements.sort();
@@ -350,25 +428,43 @@ impl Interpreter {
             }
 
             Expr::ExplicitSet(elements) => {
+                // Check if this is a type set (contains types) or a value set (contains integers)
+                if elements.len() == 1 {
+                    // Check if the single element is a tuple type
+                    let elem_val = self.eval_expr(&elements[0])?;
+                    match elem_val {
+                        Value::Type(_) => {
+                            // This is a type definition, just return it as a Type
+                            return Ok(Value::Type(Box::new(elem_val)));
+                        }
+                        Value::Integer(i) => {
+                            let mut set = HashSet::new();
+                            set.insert(i);
+                            return Ok(Value::Set(SetValue::Materialized(set)));
+                        }
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "Sets can only contain integers or be type definitions".to_string(),
+                            ));
+                        }
+                    }
+                }
+
+                // Multiple elements - must be integers
                 let mut set = HashSet::new();
                 for elem_expr in elements {
                     match self.eval_expr(elem_expr)? {
                         Value::Integer(i) => {
                             set.insert(i);
                         }
-                        Value::Set(_)
-                        | Value::Array(_)
-                        | Value::Type(_)
-                        | Value::Tuple(_)
-                        | Value::Function { .. } => {
+                        _ => {
                             return Err(RuntimeError::new(
-                                "Cannot have sets, arrays, types, tuples, or functions as elements of a set"
-                                    .to_string(),
+                                "Multi-element sets can only contain integers".to_string(),
                             ));
                         }
                     }
                 }
-                Ok(Value::Set(set))
+                Ok(Value::Set(SetValue::Materialized(set)))
             }
 
             Expr::RangeSet { start, step, end } => {
@@ -407,22 +503,12 @@ impl Interpreter {
                     return Err(RuntimeError::new("Range step cannot be zero".to_string()));
                 }
 
-                let mut set = HashSet::new();
-                let mut current = start_val;
-
-                if step_val > 0 {
-                    while current <= end_val {
-                        set.insert(current);
-                        current += step_val;
-                    }
-                } else {
-                    while current >= end_val {
-                        set.insert(current);
-                        current += step_val;
-                    }
-                }
-
-                Ok(Value::Set(set))
+                // Use lazy range representation instead of materializing
+                Ok(Value::Set(SetValue::Range {
+                    start: start_val,
+                    end: end_val,
+                    step: step_val,
+                }))
             }
 
             Expr::ImplicitSet {
@@ -440,15 +526,18 @@ impl Interpreter {
                     }
                 };
 
-                // If there's no constraint, return the type set as-is
+                // If there's no constraint, return the type set as-is (lazy!)
                 let constraint_expr = match constraint {
                     Some(c) => c,
                     None => return Ok(Value::Set(type_set)),
                 };
 
                 // Filter the type set based on the constraint
+                // This requires materialization, but we limit the size
+                let materialized = type_set.materialize()?;
                 let mut result_set = HashSet::new();
-                for &elem in &type_set {
+
+                for &elem in &materialized {
                     // Temporarily bind the variable
                     self.env.define(variable.clone(), Value::Integer(elem));
 
@@ -468,7 +557,7 @@ impl Interpreter {
                     }
                 }
 
-                Ok(Value::Set(result_set))
+                Ok(Value::Set(SetValue::Materialized(result_set)))
             }
 
             Expr::BinaryOp { op, left, right } => {
@@ -507,7 +596,9 @@ impl Interpreter {
                         // Use checked_pow to avoid overflow
                         match a.checked_pow(b as u32) {
                             Some(result) => Ok(Value::Integer(result)),
-                            None => Err(RuntimeError::new("Integer overflow in power operation".to_string())),
+                            None => Err(RuntimeError::new(
+                                "Integer overflow in power operation".to_string(),
+                            )),
                         }
                     }
 
@@ -533,8 +624,11 @@ impl Interpreter {
 
                     // Set operations
                     (BinaryOperator::Subtract, Value::Set(a), Value::Set(b)) => {
-                        let diff: HashSet<_> = a.difference(&b).cloned().collect();
-                        Ok(Value::Set(diff))
+                        // Materialize both sets (with size limit)
+                        let set_a = a.materialize()?;
+                        let set_b = b.materialize()?;
+                        let diff: HashSet<_> = set_a.difference(&set_b).cloned().collect();
+                        Ok(Value::Set(SetValue::Materialized(diff)))
                     }
 
                     _ => Err(RuntimeError::new(format!(
@@ -580,7 +674,9 @@ impl Interpreter {
                         .copied()
                         .map(Value::Integer)
                         .ok_or_else(|| RuntimeError::new("Index out of bounds".to_string())),
-                    Value::Set(set) => {
+                    Value::Set(set_val) => {
+                        // Materialize set for indexing
+                        let set = set_val.materialize()?;
                         // For sets, treat indexing as element selection
                         let mut elements: Vec<_> = set.iter().copied().collect();
                         elements.sort();
@@ -742,13 +838,16 @@ impl Interpreter {
                 }
             }
 
-            Expr::TupleType { fields: _ } => {
-                // For now, tuple types are just type definitions
-                // We could store them as a special type value
-                // For simplicity, we'll just return a placeholder
-                Err(RuntimeError::new(
-                    "Tuple types are not yet fully supported in runtime evaluation".to_string(),
-                ))
+            Expr::TupleType { fields } => {
+                // Tuple types are type specifications, not runtime values
+                // Store them as a Type value containing a tuple literal representation
+                let mut type_fields = HashMap::new();
+                for (name, _type_expr) in fields {
+                    // For now, just store 0 as a placeholder for the type
+                    // In a full type system, we'd store the actual type information
+                    type_fields.insert(name.clone(), 0);
+                }
+                Ok(Value::Type(Box::new(Value::Tuple(type_fields))))
             }
 
             Expr::TupleLiteral { fields } => {
@@ -759,7 +858,7 @@ impl Interpreter {
                         _ => {
                             return Err(RuntimeError::new(
                                 "Tuple fields must be integers".to_string(),
-                            ))
+                            ));
                         }
                     };
                     tuple_fields.insert(name.clone(), value);
@@ -770,11 +869,13 @@ impl Interpreter {
             Expr::FieldAccess { object, field } => {
                 let obj_val = self.eval_expr(object)?;
                 match obj_val {
-                    Value::Tuple(fields) => {
-                        fields.get(field).copied().ok_or_else(|| {
+                    Value::Tuple(fields) => fields
+                        .get(field)
+                        .copied()
+                        .ok_or_else(|| {
                             RuntimeError::new(format!("Tuple has no field named '{}'", field))
-                        }).map(Value::Integer)
-                    }
+                        })
+                        .map(Value::Integer),
                     _ => Err(RuntimeError::new(
                         "Field access is only supported on tuples".to_string(),
                     )),
@@ -826,11 +927,17 @@ impl Interpreter {
                 }
                 let arg = self.eval_expr(&args[0])?;
                 match arg {
-                    Value::Set(set) => Ok(Value::Integer(set.len() as i64)),
+                    Value::Set(set) => {
+                        let size = set.cardinality()?;
+                        Ok(Value::Integer(size as i64))
+                    }
                     Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
-                    Value::Integer(_) | Value::Type(_) | Value::Tuple(_) | Value::Function { .. } => Err(
-                        RuntimeError::new("card() expects a set or array argument".to_string()),
-                    ),
+                    Value::Integer(_)
+                    | Value::Type(_)
+                    | Value::Tuple(_)
+                    | Value::Function { .. } => Err(RuntimeError::new(
+                        "card() expects a set or array argument".to_string(),
+                    )),
                 }
             }
 
@@ -844,11 +951,13 @@ impl Interpreter {
                 let arg = self.eval_expr(&args[0])?;
                 match arg {
                     Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
-                    Value::Set(_) | Value::Integer(_) | Value::Type(_) | Value::Tuple(_) | Value::Function { .. } => {
-                        Err(RuntimeError::new(
-                            "len() expects an array argument".to_string(),
-                        ))
-                    }
+                    Value::Set(_)
+                    | Value::Integer(_)
+                    | Value::Type(_)
+                    | Value::Tuple(_)
+                    | Value::Function { .. } => Err(RuntimeError::new(
+                        "len() expects an array argument".to_string(),
+                    )),
                 }
             }
 
@@ -1008,11 +1117,13 @@ impl Interpreter {
                         }
 
                         // If no explicit return, return the first output parameter
-                        if !explicit_return && !returns.is_empty()
+                        if !explicit_return
+                            && !returns.is_empty()
                             && let Some(output_param) = returns.first()
-                                && let Ok(val) = self.env.get(&output_param.name) {
-                                    result = val;
-                                }
+                            && let Ok(val) = self.env.get(&output_param.name)
+                        {
+                            result = val;
+                        }
 
                         // Restore environment
                         for (name, value) in saved_bindings {
