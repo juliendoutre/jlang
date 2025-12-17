@@ -247,6 +247,29 @@ impl PrettyPrinter {
                     println!("{}  end: implicit (length)", indent_str);
                 }
             }
+
+            Expr::TupleType { fields } => {
+                println!("{}TupleType:", indent_str);
+                for (name, type_expr) in fields {
+                    print!("{}  {}: ", indent_str, name);
+                    self.print_expr(type_expr, 0);
+                }
+            }
+
+            Expr::TupleLiteral { fields } => {
+                println!("{}TupleLiteral:", indent_str);
+                for (name, value_expr) in fields {
+                    print!("{}  {}: ", indent_str, name);
+                    self.print_expr(value_expr, 0);
+                }
+            }
+
+            Expr::FieldAccess { object, field } => {
+                println!("{}FieldAccess:", indent_str);
+                print!("{}  object: ", indent_str);
+                self.print_expr(object, 0);
+                println!("{}  field: {}", indent_str, field);
+            }
         }
     }
 }

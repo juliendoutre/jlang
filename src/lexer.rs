@@ -209,8 +209,8 @@ impl<'a> Lexer<'a> {
                         Token::new(TokenType::Ellipsis, position)
                     }
                 } else {
-                    // Single dot - not in our spec, skip it
-                    self.next_token()
+                    // Single dot - for field access
+                    Token::new(TokenType::Dot, position)
                 }
             }
             Some('-') => {

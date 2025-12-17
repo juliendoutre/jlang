@@ -50,7 +50,8 @@ postfix_expr = primary_expr { postfix_operator } ;
 
 postfix_operator = "[" expression "]"                    (* indexing *)
                  | "[" expression ":" [ expression ] "]" (* slicing with start *)
-                 | "[" ":" expression "]"                (* slicing without start *) ;
+                 | "[" ":" expression "]"                (* slicing without start *)
+                 | "." identifier                        (* field access *) ;
 
 primary_expr = integer
              | character
@@ -58,12 +59,14 @@ primary_expr = integer
              | function_call
              | set_expr
              | array_expr
+             | tuple_expr
              | "(" expression ")" ;
 
 function_call = identifier "(" [ expression { "," expression } ] ")" ;
 
 (* Set Expressions *)
 set_expr = "{" "}"                                                        (* empty set *)
+         | "{" tuple_type "}"                                             (* tuple type set *)
          | "{" identifier ":" expression [ "|" expression ] "}"           (* implicit set *)
          | "{" expression { "," expression } "}"                          (* explicit set *)
          | "{" expression "," [ expression "," ] "..." "," expression "}" (* range set *) ;
@@ -72,6 +75,13 @@ set_expr = "{" "}"                                                        (* emp
 array_expr = "[" "]"                                                        (* empty array *)
            | "[" expression { "," expression } "]"                          (* array literal *)
            | "[" expression "," [ expression "," ] "..." "," expression "]" (* array range *) ;
+
+(* Tuple Expressions *)
+tuple_type = "(" tuple_fields ")" ;
+
+tuple_expr = "(" tuple_fields ")" ;
+
+tuple_fields = [ identifier ":" expression { "," identifier ":" expression } [ "," ] ] ;
 
 (* Operators *)
 binary_operator = "+" | "-" | "*" | "/" | "%"

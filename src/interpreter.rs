@@ -19,6 +19,8 @@ pub enum Value {
         returns: Vec<Parameter>,
         body: Vec<Statement>,
     },
+    /// A tuple with named fields
+    Tuple(HashMap<String, i64>),
 }
 
 impl fmt::Display for Value {
@@ -49,6 +51,18 @@ impl fmt::Display for Value {
             }
             Value::Type(inner) => write!(f, "Type({})", inner),
             Value::Function { .. } => write!(f, "<function>"),
+            Value::Tuple(fields) => {
+                let mut field_vec: Vec<_> = fields.iter().collect();
+                field_vec.sort_by_key(|(k, _)| *k);
+                write!(f, "(")?;
+                for (i, (name, value)) in field_vec.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", name, value)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -345,9 +359,10 @@ impl Interpreter {
                         Value::Set(_)
                         | Value::Array(_)
                         | Value::Type(_)
+                        | Value::Tuple(_)
                         | Value::Function { .. } => {
                             return Err(RuntimeError::new(
-                                "Cannot have sets, arrays, types, or functions as elements of a set"
+                                "Cannot have sets, arrays, types, tuples, or functions as elements of a set"
                                     .to_string(),
                             ));
                         }
@@ -714,6 +729,45 @@ impl Interpreter {
                     _ => Err(RuntimeError::new("Can only slice arrays".to_string())),
                 }
             }
+
+            Expr::TupleType { fields: _ } => {
+                // For now, tuple types are just type definitions
+                // We could store them as a special type value
+                // For simplicity, we'll just return a placeholder
+                Err(RuntimeError::new(
+                    "Tuple types are not yet fully supported in runtime evaluation".to_string(),
+                ))
+            }
+
+            Expr::TupleLiteral { fields } => {
+                let mut tuple_fields = HashMap::new();
+                for (name, value_expr) in fields {
+                    let value = match self.eval_expr(value_expr)? {
+                        Value::Integer(i) => i,
+                        _ => {
+                            return Err(RuntimeError::new(
+                                "Tuple fields must be integers".to_string(),
+                            ))
+                        }
+                    };
+                    tuple_fields.insert(name.clone(), value);
+                }
+                Ok(Value::Tuple(tuple_fields))
+            }
+
+            Expr::FieldAccess { object, field } => {
+                let obj_val = self.eval_expr(object)?;
+                match obj_val {
+                    Value::Tuple(fields) => {
+                        fields.get(field).copied().ok_or_else(|| {
+                            RuntimeError::new(format!("Tuple has no field named '{}'", field))
+                        }).map(Value::Integer)
+                    }
+                    _ => Err(RuntimeError::new(
+                        "Field access is only supported on tuples".to_string(),
+                    )),
+                }
+            }
         }
     }
 
@@ -752,7 +806,7 @@ impl Interpreter {
                 match arg {
                     Value::Set(set) => Ok(Value::Integer(set.len() as i64)),
                     Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
-                    Value::Integer(_) | Value::Type(_) | Value::Function { .. } => Err(
+                    Value::Integer(_) | Value::Type(_) | Value::Tuple(_) | Value::Function { .. } => Err(
                         RuntimeError::new("card() expects a set or array argument".to_string()),
                     ),
                 }
@@ -768,7 +822,7 @@ impl Interpreter {
                 let arg = self.eval_expr(&args[0])?;
                 match arg {
                     Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
-                    Value::Set(_) | Value::Integer(_) | Value::Type(_) | Value::Function { .. } => {
+                    Value::Set(_) | Value::Integer(_) | Value::Type(_) | Value::Tuple(_) | Value::Function { .. } => {
                         Err(RuntimeError::new(
                             "len() expects an array argument".to_string(),
                         ))

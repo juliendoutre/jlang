@@ -208,34 +208,56 @@ where
                         }) => {
                             self.advance(); // consume =
 
-                            // Check for function definition: f = (...) -> (...) { ... }
-                            if let Some(Token {
-                                token_type: TokenType::LeftParen,
-                                ..
-                            }) = self.peek()
-                            {
-                                // Try to parse as function definition
-                                if let Ok(func_def) =
-                                    self.try_parse_function_definition(name.clone())
-                                {
-                                    return Ok(func_def);
-                                }
+                            // Parse the value (could be expression, tuple, or function definition)
+                            let value = self.parse_expression()?;
 
-                                // Otherwise parse as regular expression
-                                let value = self.parse_expression()?;
+                            // Check if this might be a function definition by looking for ->
+                            // If we see ->, try to parse as function definition
+                            if matches!(
+                                self.peek(),
+                                Some(Token {
+                                    token_type: TokenType::Arrow,
+                                    ..
+                                })
+                            ) {
+                                // This looks like a function definition
+                                // The value we parsed should be a tuple literal representing parameters
+                                // Parse the rest of the function definition
+                                self.advance(); // consume ->
+                                self.expect(TokenType::LeftParen)?;
+                                let returns = self.parse_parameters()?;
+                                self.expect(TokenType::RightParen)?;
+                                self.expect(TokenType::LeftBrace)?;
+                                let body = self.parse_function_body()?;
+                                self.expect(TokenType::RightBrace)?;
 
-                                // Determine if it's a definition or assignment based on naming convention
-                                // Uppercase = definition, lowercase = assignment
-                                if name.chars().next().unwrap().is_uppercase() {
-                                    Ok(Statement::Definition { name, value })
-                                } else {
-                                    Ok(Statement::Assignment { name, value })
-                                }
+                                // Extract parameters from the tuple literal
+                                let params = match value {
+                                    Expr::TupleLiteral { fields } => {
+                                        // Convert tuple fields to parameters
+                                        fields
+                                            .into_iter()
+                                            .map(|(name, type_expr)| Parameter {
+                                                name,
+                                                type_expr: Some(type_expr),
+                                            })
+                                            .collect()
+                                    }
+                                    _ => {
+                                        return Err(ParseError::new(
+                                            "Function parameters must be a tuple".to_string(),
+                                        ));
+                                    }
+                                };
+
+                                Ok(Statement::FunctionDefinition {
+                                    name,
+                                    params,
+                                    returns,
+                                    body,
+                                })
                             } else {
-                                let value = self.parse_expression()?;
-
-                                // Determine if it's a definition or assignment based on naming convention
-                                // Uppercase = definition, lowercase = assignment
+                                // Regular assignment or definition
                                 if name.chars().next().unwrap().is_uppercase() {
                                     Ok(Statement::Definition { name, value })
                                 } else {
@@ -265,30 +287,6 @@ where
                 _ => Err(ParseError::new("Expected identifier at start of statement")),
             },
         }
-    }
-
-    /// Try to parse a function definition
-    fn try_parse_function_definition(&mut self, name: String) -> Result<Statement, ParseError> {
-        self.expect(TokenType::LeftParen)?;
-        let params = self.parse_parameters()?;
-        self.expect(TokenType::RightParen)?;
-        self.expect(TokenType::Arrow)?;
-        self.expect(TokenType::LeftParen)?;
-        let returns = self.parse_parameters()?;
-        self.expect(TokenType::RightParen)?;
-        self.expect(TokenType::LeftBrace)?;
-
-        // Parse body (simplified - just skip to closing brace for now)
-        let body = self.parse_function_body()?;
-
-        self.expect(TokenType::RightBrace)?;
-
-        Ok(Statement::FunctionDefinition {
-            name,
-            params,
-            returns,
-            body,
-        })
     }
 
     /// Parse function parameters
@@ -587,83 +585,107 @@ where
         Ok(left)
     }
 
-    /// Parse postfix expressions (array indexing, slicing, etc.)
+    /// Parse postfix expressions (array indexing, slicing, field access, etc.)
     fn parse_postfix_expr(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_primary_expr()?;
 
-        while let Some(Token {
-            token_type: TokenType::LeftBracket,
-            ..
-        }) = self.peek()
-        {
-            self.advance(); // consume [
-
-            // Check for slice starting with colon: array[:]
-            if let Some(Token {
-                token_type: TokenType::Colon,
-                ..
-            }) = self.peek()
-            {
-                self.advance(); // consume :
-
-                // Check if there's an end expression
-                let end = if matches!(
-                    self.peek(),
-                    Some(Token {
-                        token_type: TokenType::RightBracket,
-                        ..
-                    })
-                ) {
-                    None
-                } else {
-                    Some(Box::new(self.parse_expression()?))
-                };
-
-                self.expect(TokenType::RightBracket)?;
-                expr = Expr::Slice {
-                    array: Box::new(expr),
-                    start: None,
-                    end,
-                };
-            } else {
-                // Parse first expression (could be index or slice start)
-                let first = self.parse_expression()?;
-
-                // Check for colon (slice)
-                if let Some(Token {
-                    token_type: TokenType::Colon,
+        loop {
+            match self.peek() {
+                Some(Token {
+                    token_type: TokenType::LeftBracket,
                     ..
-                }) = self.peek()
-                {
-                    self.advance(); // consume :
+                }) => {
+                    self.advance(); // consume [
 
-                    // Check if there's an end expression
-                    let end = if matches!(
-                        self.peek(),
-                        Some(Token {
-                            token_type: TokenType::RightBracket,
-                            ..
-                        })
-                    ) {
-                        None
+                    // Check for slice starting with colon: array[:]
+                    if let Some(Token {
+                        token_type: TokenType::Colon,
+                        ..
+                    }) = self.peek()
+                    {
+                        self.advance(); // consume :
+
+                        // Check if there's an end expression
+                        let end = if matches!(
+                            self.peek(),
+                            Some(Token {
+                                token_type: TokenType::RightBracket,
+                                ..
+                            })
+                        ) {
+                            None
+                        } else {
+                            Some(Box::new(self.parse_expression()?))
+                        };
+
+                        self.expect(TokenType::RightBracket)?;
+                        expr = Expr::Slice {
+                            array: Box::new(expr),
+                            start: None,
+                            end,
+                        };
                     } else {
-                        Some(Box::new(self.parse_expression()?))
+                        // Parse first expression (could be index or slice start)
+                        let first = self.parse_expression()?;
+
+                        // Check for colon (slice)
+                        if let Some(Token {
+                            token_type: TokenType::Colon,
+                            ..
+                        }) = self.peek()
+                        {
+                            self.advance(); // consume :
+
+                            // Check if there's an end expression
+                            let end = if matches!(
+                                self.peek(),
+                                Some(Token {
+                                    token_type: TokenType::RightBracket,
+                                    ..
+                                })
+                            ) {
+                                None
+                            } else {
+                                Some(Box::new(self.parse_expression()?))
+                            };
+
+                            self.expect(TokenType::RightBracket)?;
+                            expr = Expr::Slice {
+                                array: Box::new(expr),
+                                start: Some(Box::new(first)),
+                                end,
+                            };
+                        } else {
+                            // Regular indexing
+                            self.expect(TokenType::RightBracket)?;
+                            expr = Expr::Index {
+                                array: Box::new(expr),
+                                index: Box::new(first),
+                            };
+                        }
+                    }
+                }
+                Some(Token {
+                    token_type: TokenType::Dot,
+                    ..
+                }) => {
+                    self.advance(); // consume .
+
+                    // Expect field name
+                    let field = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::Identifier(name),
+                            ..
+                        }) => name,
+                        _ => return Err(ParseError::new("Expected field name after '.'")),
                     };
 
-                    self.expect(TokenType::RightBracket)?;
-                    expr = Expr::Slice {
-                        array: Box::new(expr),
-                        start: Some(Box::new(first)),
-                        end,
-                    };
-                } else {
-                    // Regular indexing
-                    self.expect(TokenType::RightBracket)?;
-                    expr = Expr::Index {
-                        array: Box::new(expr),
-                        index: Box::new(first),
+                    expr = Expr::FieldAccess {
+                        object: Box::new(expr),
+                        field,
                     };
                 }
+                _ => break,
             }
         }
 
@@ -685,10 +707,177 @@ where
                 token_type: TokenType::LeftParen,
                 ..
             }) => {
-                // Parenthesized expression
-                let expr = self.parse_expression()?;
-                self.expect(TokenType::RightParen)?;
-                Ok(expr)
+                // Could be a parenthesized expression or tuple literal
+                // We need to look ahead to distinguish them
+
+                // Check for empty tuple/parens
+                if let Some(Token {
+                    token_type: TokenType::RightParen,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance();
+                    return Ok(Expr::TupleLiteral { fields: Vec::new() });
+                }
+
+                // Check if this looks like a tuple: identifier followed by colon
+                // We need to peek ahead to see if there's a pattern like "id:"
+                let is_tuple = if let Some(Token {
+                    token_type: TokenType::Identifier(_),
+                    ..
+                }) = self.peek()
+                {
+                    // We need to check if the next token after the identifier is a colon
+                    // Since we can't easily peek 2 tokens ahead, we'll parse the identifier
+                    // and check, then decide what to do
+                    true // tentatively assume it might be a tuple
+                } else {
+                    false
+                };
+
+                if is_tuple {
+                    // Parse first identifier
+                    let first_id = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::Identifier(name),
+                            ..
+                        }) => name,
+                        _ => unreachable!(),
+                    };
+
+                    // Check if followed by colon
+                    if matches!(
+                        self.peek(),
+                        Some(Token {
+                            token_type: TokenType::Colon,
+                            ..
+                        })
+                    ) {
+                        // It's a tuple! Parse it as such
+                        self.advance(); // consume :
+                        let first_value = self.parse_expression()?;
+                        let mut fields = vec![(first_id, first_value)];
+
+                        // Parse remaining fields
+                        loop {
+                            match self.peek() {
+                                Some(Token {
+                                    token_type: TokenType::Comma,
+                                    ..
+                                }) => {
+                                    self.advance();
+                                    // Allow trailing comma
+                                    if matches!(
+                                        self.peek(),
+                                        Some(Token {
+                                            token_type: TokenType::RightParen,
+                                            ..
+                                        })
+                                    ) {
+                                        break;
+                                    }
+                                    // Parse next field
+                                    let field_name = match self.advance() {
+                                        Some(Token {
+                                            token_type: TokenType::Identifier(name),
+                                            ..
+                                        }) => name,
+                                        _ => {
+                                            return Err(ParseError::new(
+                                                "Expected field name in tuple",
+                                            ));
+                                        }
+                                    };
+                                    self.expect(TokenType::Colon)?;
+                                    let field_value = self.parse_expression()?;
+                                    fields.push((field_name, field_value));
+                                }
+                                Some(Token {
+                                    token_type: TokenType::RightParen,
+                                    ..
+                                }) => break,
+                                _ => return Err(ParseError::new("Expected ',' or ')' in tuple")),
+                            }
+                        }
+
+                        self.expect(TokenType::RightParen)?;
+                        return Ok(Expr::TupleLiteral { fields });
+                    } else {
+                        // Not a tuple, it's a parenthesized expression starting with an identifier
+                        // We've already consumed the identifier, so we need to build an expression from it
+                        let mut expr = Expr::Identifier(first_id);
+
+                        // Continue parsing as a binary expression if there are operators
+                        // We need to handle the rest of the expression inside the parens
+                        loop {
+                            match self.peek() {
+                                Some(Token {
+                                    token_type: TokenType::RightParen,
+                                    ..
+                                }) => {
+                                    self.advance();
+                                    return Ok(expr);
+                                }
+                                Some(Token { token_type, .. })
+                                    if matches!(
+                                        token_type,
+                                        TokenType::Plus
+                                            | TokenType::Minus
+                                            | TokenType::Star
+                                            | TokenType::Slash
+                                            | TokenType::Percent
+                                            | TokenType::DoubleEquals
+                                            | TokenType::LessThan
+                                            | TokenType::GreaterThan
+                                            | TokenType::LessThanOrEqual
+                                            | TokenType::GreaterThanOrEqual
+                                            | TokenType::Ampersand
+                                    ) =>
+                                {
+                                    // Parse as binary expression
+                                    // We need to continue parsing the full expression
+                                    // This is tricky because we've already parsed the left side
+                                    // Let's just parse the rest as a binary expression
+                                    let (op, _) = match token_type {
+                                        TokenType::Plus => (BinaryOperator::Add, 1),
+                                        TokenType::Minus => (BinaryOperator::Subtract, 1),
+                                        TokenType::Star => (BinaryOperator::Multiply, 2),
+                                        TokenType::Slash => (BinaryOperator::Divide, 2),
+                                        TokenType::Percent => (BinaryOperator::Modulo, 2),
+                                        TokenType::DoubleEquals => (BinaryOperator::Equals, 0),
+                                        TokenType::LessThan => (BinaryOperator::LessThan, 0),
+                                        TokenType::GreaterThan => (BinaryOperator::GreaterThan, 0),
+                                        TokenType::LessThanOrEqual => {
+                                            (BinaryOperator::LessThanOrEqual, 0)
+                                        }
+                                        TokenType::GreaterThanOrEqual => {
+                                            (BinaryOperator::GreaterThanOrEqual, 0)
+                                        }
+                                        TokenType::Ampersand => (BinaryOperator::And, 0),
+                                        _ => unreachable!(),
+                                    };
+                                    self.advance(); // consume operator
+                                    let right = self.parse_postfix_expr()?;
+                                    expr = Expr::BinaryOp {
+                                        op,
+                                        left: Box::new(expr),
+                                        right: Box::new(right),
+                                    };
+                                }
+                                _ => {
+                                    return Err(ParseError::new(
+                                        "Unexpected token in parenthesized expression",
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Not starting with identifier, parse as regular parenthesized expression
+                    let expr = self.parse_expression()?;
+                    self.expect(TokenType::RightParen)?;
+                    Ok(expr)
+                }
             }
             Some(Token {
                 token_type: TokenType::Identifier(name),
@@ -889,6 +1078,19 @@ where
             return Ok(Expr::ExplicitSet(Vec::new()));
         }
 
+        // Check for tuple type: { (x: T, y: U, ...) }
+        if let Some(Token {
+            token_type: TokenType::LeftParen,
+            ..
+        }) = self.peek()
+        {
+            self.advance(); // consume (
+            let fields = self.parse_tuple_fields()?;
+            self.expect(TokenType::RightParen)?;
+            self.expect(TokenType::RightBrace)?;
+            return Ok(Expr::ExplicitSet(vec![Expr::TupleType { fields }]));
+        }
+
         // Try to determine what kind of set this is
         // Look ahead to see if we have: x: Type or just elements
 
@@ -1082,5 +1284,65 @@ where
             }
             _ => Err(ParseError::new("Expected ',' or '}' in set")),
         }
+    }
+
+    /// Parse tuple fields: field: type, field: type, ...
+    fn parse_tuple_fields(&mut self) -> Result<Vec<(String, Expr)>, ParseError> {
+        let mut fields = Vec::new();
+
+        // Check for empty tuple
+        if let Some(Token {
+            token_type: TokenType::RightParen,
+            ..
+        }) = self.peek()
+        {
+            return Ok(fields);
+        }
+
+        loop {
+            // Parse field name
+            let field_name = match self.advance() {
+                Some(Token {
+                    token_type: TokenType::Identifier(name),
+                    ..
+                }) => name,
+                _ => return Err(ParseError::new("Expected field name in tuple")),
+            };
+
+            // Expect :
+            self.expect(TokenType::Colon)?;
+
+            // Parse field type or value
+            let field_value = self.parse_expression()?;
+
+            fields.push((field_name, field_value));
+
+            // Check for comma or end
+            match self.peek() {
+                Some(Token {
+                    token_type: TokenType::Comma,
+                    ..
+                }) => {
+                    self.advance();
+                    // Allow trailing comma
+                    if matches!(
+                        self.peek(),
+                        Some(Token {
+                            token_type: TokenType::RightParen,
+                            ..
+                        })
+                    ) {
+                        break;
+                    }
+                }
+                Some(Token {
+                    token_type: TokenType::RightParen,
+                    ..
+                }) => break,
+                _ => return Err(ParseError::new("Expected ',' or ')' in tuple")),
+            }
+        }
+
+        Ok(fields)
     }
 }

@@ -34,6 +34,7 @@ pub enum TokenType {
     Comma,        // ,
     Colon,        // :
     Pipe,         // |
+    Dot,          // .
 
     // Operators
     Equals,             // =

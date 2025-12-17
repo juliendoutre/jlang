@@ -67,6 +67,15 @@ pub enum Expr {
         start: Option<Box<Expr>>,
         end: Option<Box<Expr>>,
     },
+
+    /// Tuple type: (x: INTEGER, y: INTEGER, z: INTEGER)
+    TupleType { fields: Vec<(String, Expr)> },
+
+    /// Tuple literal: (x: 3, y: -8, z: 0)
+    TupleLiteral { fields: Vec<(String, Expr)> },
+
+    /// Field access: tuple.field
+    FieldAccess { object: Box<Expr>, field: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
