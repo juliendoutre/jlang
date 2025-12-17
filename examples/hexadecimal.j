@@ -11,10 +11,10 @@ input: [n]BYTE = stdin()
 // Defining a function to encode a given string to its hexadecimal representation.
 encode = (input: [n: BYTE]BYTE) -> (encoded: [2*n]BYTE) {
     // Convert each byte to two hex digits
-    for i in [0, ..., n] {
+    for i in [0, ..., n - 1] {
         // Get high and low nibbles
-        high = byte[i] / 16
-        low = byte[i] % 16
+        high = input[i] / 16
+        low = input[i] % 16
         
         // Convert high nibble to hex character
         high_char = 0

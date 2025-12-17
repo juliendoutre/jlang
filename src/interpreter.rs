@@ -837,9 +837,10 @@ impl Interpreter {
                             )));
                         }
 
-                        // Save current environment state
+                        // Save current environment state (both input and output parameters)
                         let saved_bindings: Vec<_> = params
                             .iter()
+                            .chain(returns.iter())
                             .filter_map(|p| {
                                 self.env
                                     .bindings
@@ -848,9 +849,53 @@ impl Interpreter {
                             })
                             .collect();
 
-                        // Bind parameters
+                        // Bind input parameters
                         for (param, value) in params.iter().zip(arg_values.iter()) {
                             self.env.define(param.name.clone(), value.clone());
+                        }
+
+                        // Initialize output parameters
+                        for return_param in returns.iter() {
+                            if let Some(type_expr) = &return_param.type_expr {
+                                // Check if it's an array type
+                                match type_expr {
+                                    Expr::ArrayType { size, element_type: _ } => {
+                                        // Evaluate the size expression
+                                        let size_val = self.eval_expr(size)?;
+                                        let array_size = match size_val {
+                                            Value::Integer(n) => {
+                                                if n < 0 {
+                                                    return Err(RuntimeError::new(
+                                                        "Array size cannot be negative".to_string(),
+                                                    ));
+                                                }
+                                                n as usize
+                                            }
+                                            _ => {
+                                                return Err(RuntimeError::new(
+                                                    "Array size must be an integer".to_string(),
+                                                ))
+                                            }
+                                        };
+                                        // Initialize with zeros
+                                        let zero_array = vec![0; array_size];
+                                        self.env.define(
+                                            return_param.name.clone(),
+                                            Value::Array(zero_array),
+                                        );
+                                    }
+                                    _ => {
+                                        // For non-array types, initialize with 0
+                                        self.env.define(
+                                            return_param.name.clone(),
+                                            Value::Integer(0),
+                                        );
+                                    }
+                                }
+                            } else {
+                                // No type annotation, initialize with 0
+                                self.env.define(return_param.name.clone(), Value::Integer(0));
+                            }
                         }
 
                         // Execute function body
