@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement};
+use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement, UnaryOperator};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -498,6 +498,18 @@ impl Interpreter {
                         }
                         Ok(Value::Integer(a % b))
                     }
+                    (BinaryOperator::Power, Value::Integer(a), Value::Integer(b)) => {
+                        if b < 0 {
+                            return Err(RuntimeError::new(
+                                "Negative exponents not supported".to_string(),
+                            ));
+                        }
+                        // Use checked_pow to avoid overflow
+                        match a.checked_pow(b as u32) {
+                            Some(result) => Ok(Value::Integer(result)),
+                            None => Err(RuntimeError::new("Integer overflow in power operation".to_string())),
+                        }
+                    }
 
                     // Integer comparisons (return 0 for false, 1 for true)
                     (BinaryOperator::Equals, Value::Integer(a), Value::Integer(b)) => {
@@ -765,6 +777,16 @@ impl Interpreter {
                     }
                     _ => Err(RuntimeError::new(
                         "Field access is only supported on tuples".to_string(),
+                    )),
+                }
+            }
+
+            Expr::UnaryOp { op, operand } => {
+                let val = self.eval_expr(operand)?;
+                match (op, val) {
+                    (UnaryOperator::Negate, Value::Integer(i)) => Ok(Value::Integer(-i)),
+                    _ => Err(RuntimeError::new(
+                        "Unary operator only supported on integers".to_string(),
                     )),
                 }
             }

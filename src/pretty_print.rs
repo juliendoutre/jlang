@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Program, Statement};
+use crate::ast::{Expr, Program, Statement, UnaryOperator};
 
 pub struct PrettyPrinter {
     indent: usize,
@@ -269,6 +269,15 @@ impl PrettyPrinter {
                 print!("{}  object: ", indent_str);
                 self.print_expr(object, 0);
                 println!("{}  field: {}", indent_str, field);
+            }
+
+            Expr::UnaryOp { op, operand } => {
+                let op_str = match op {
+                    UnaryOperator::Negate => "-",
+                };
+                println!("{}UnaryOp: {}", indent_str, op_str);
+                print!("{}  operand: ", indent_str);
+                self.print_expr(operand, 0);
             }
         }
     }

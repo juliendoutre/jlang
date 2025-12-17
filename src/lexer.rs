@@ -166,6 +166,7 @@ impl<'a> Lexer<'a> {
             Some('|') => Token::new(TokenType::Pipe, position),
             Some('+') => Token::new(TokenType::Plus, position),
             Some('*') => Token::new(TokenType::Star, position),
+            Some('^') => Token::new(TokenType::Caret, position),
             Some('%') => Token::new(TokenType::Percent, position),
             Some('<') => {
                 // Check for <=

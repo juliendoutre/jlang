@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement};
+use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement, UnaryOperator};
 use crate::token::{Token, TokenType};
 use std::iter::Peekable;
 
@@ -545,7 +545,7 @@ where
 
     /// Parse binary expressions with precedence
     fn parse_binary_expr(&mut self, min_precedence: u8) -> Result<Expr, ParseError> {
-        let mut left = self.parse_postfix_expr()?;
+        let mut left = self.parse_unary_expr()?;
 
         while let Some(token) = self.peek() {
             let (op, precedence) = match &token.token_type {
@@ -554,6 +554,7 @@ where
                 TokenType::Star => (BinaryOperator::Multiply, 2),
                 TokenType::Slash => (BinaryOperator::Divide, 2),
                 TokenType::Percent => (BinaryOperator::Modulo, 2),
+                TokenType::Caret => (BinaryOperator::Power, 3), // Higher precedence for power
                 TokenType::DoubleEquals => (BinaryOperator::Equals, 0),
                 TokenType::LessThan => (BinaryOperator::LessThan, 0),
                 TokenType::GreaterThan => (BinaryOperator::GreaterThan, 0),
@@ -583,6 +584,24 @@ where
         }
 
         Ok(left)
+    }
+
+    /// Parse unary expressions (like -x)
+    fn parse_unary_expr(&mut self) -> Result<Expr, ParseError> {
+        match self.peek() {
+            Some(Token {
+                token_type: TokenType::Minus,
+                ..
+            }) => {
+                self.advance(); // consume -
+                let operand = self.parse_unary_expr()?; // Allow chaining: --x
+                Ok(Expr::UnaryOp {
+                    op: UnaryOperator::Negate,
+                    operand: Box::new(operand),
+                })
+            }
+            _ => self.parse_postfix_expr(),
+        }
     }
 
     /// Parse postfix expressions (array indexing, slicing, field access, etc.)

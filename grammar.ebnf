@@ -44,7 +44,9 @@ size_expr = expression
 (* Expressions *)
 expression = binary_expr ;
 
-binary_expr = postfix_expr { binary_operator postfix_expr } ;
+binary_expr = unary_expr { binary_operator unary_expr } ;
+
+unary_expr = [ unary_operator ] postfix_expr ;
 
 postfix_expr = primary_expr { postfix_operator } ;
 
@@ -84,9 +86,11 @@ tuple_expr = "(" tuple_fields ")" ;
 tuple_fields = [ identifier ":" expression { "," identifier ":" expression } [ "," ] ] ;
 
 (* Operators *)
-binary_operator = "+" | "-" | "*" | "/" | "%"
+binary_operator = "+" | "-" | "*" | "/" | "%" | "^"
                 | "==" | "<" | ">" | "<=" | ">="
                 | "&" | "|" ;
+
+unary_operator = "-" ;
 
 (* Lexical Elements *)
 identifier = uppercase_identifier | lowercase_identifier ;

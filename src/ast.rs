@@ -35,6 +35,12 @@ pub enum Expr {
         right: Box<Expr>,
     },
 
+    /// Unary operation
+    UnaryOp {
+        op: UnaryOperator,
+        operand: Box<Expr>,
+    },
+
     /// Function call: card(A), out(b), in()
     FunctionCall { name: String, args: Vec<Expr> },
 
@@ -84,6 +90,7 @@ pub enum BinaryOperator {
     Subtract,           // -
     Multiply,           // *
     Divide,             // /
+    Power,              // ^
     Equals,             // ==
     Modulo,             // %
     LessThan,           // <
@@ -91,6 +98,11 @@ pub enum BinaryOperator {
     LessThanOrEqual,    // <=
     GreaterThanOrEqual, // >=
     And,                // &
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOperator {
+    Negate, // -
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -43,6 +43,7 @@ pub enum TokenType {
     Minus,              // -
     Star,               // *
     Slash,              // /
+    Caret,              // ^
     Arrow,              // ->
     Ellipsis,           // ...
     Percent,            // %
