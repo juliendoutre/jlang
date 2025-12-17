@@ -591,83 +591,79 @@ where
     fn parse_postfix_expr(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_primary_expr()?;
 
-        loop {
-            match self.peek() {
-                Some(Token {
-                    token_type: TokenType::LeftBracket,
-                    ..
-                }) => {
-                    self.advance(); // consume [
+        while let Some(Token {
+            token_type: TokenType::LeftBracket,
+            ..
+        }) = self.peek()
+        {
+            self.advance(); // consume [
 
-                    // Check for slice starting with colon: array[:]
-                    if let Some(Token {
-                        token_type: TokenType::Colon,
+            // Check for slice starting with colon: array[:]
+            if let Some(Token {
+                token_type: TokenType::Colon,
+                ..
+            }) = self.peek()
+            {
+                self.advance(); // consume :
+
+                // Check if there's an end expression
+                let end = if matches!(
+                    self.peek(),
+                    Some(Token {
+                        token_type: TokenType::RightBracket,
                         ..
-                    }) = self.peek()
-                    {
-                        self.advance(); // consume :
+                    })
+                ) {
+                    None
+                } else {
+                    Some(Box::new(self.parse_expression()?))
+                };
 
-                        // Check if there's an end expression
-                        let end = if matches!(
-                            self.peek(),
-                            Some(Token {
-                                token_type: TokenType::RightBracket,
-                                ..
-                            })
-                        ) {
-                            None
-                        } else {
-                            Some(Box::new(self.parse_expression()?))
-                        };
+                self.expect(TokenType::RightBracket)?;
+                expr = Expr::Slice {
+                    array: Box::new(expr),
+                    start: None,
+                    end,
+                };
+            } else {
+                // Parse first expression (could be index or slice start)
+                let first = self.parse_expression()?;
 
-                        self.expect(TokenType::RightBracket)?;
-                        expr = Expr::Slice {
-                            array: Box::new(expr),
-                            start: None,
-                            end,
-                        };
-                    } else {
-                        // Parse first expression (could be index or slice start)
-                        let first = self.parse_expression()?;
+                // Check for colon (slice)
+                if let Some(Token {
+                    token_type: TokenType::Colon,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance(); // consume :
 
-                        // Check for colon (slice)
-                        if let Some(Token {
-                            token_type: TokenType::Colon,
+                    // Check if there's an end expression
+                    let end = if matches!(
+                        self.peek(),
+                        Some(Token {
+                            token_type: TokenType::RightBracket,
                             ..
-                        }) = self.peek()
-                        {
-                            self.advance(); // consume :
+                        })
+                    ) {
+                        None
+                    } else {
+                        Some(Box::new(self.parse_expression()?))
+                    };
 
-                            // Check if there's an end expression
-                            let end = if matches!(
-                                self.peek(),
-                                Some(Token {
-                                    token_type: TokenType::RightBracket,
-                                    ..
-                                })
-                            ) {
-                                None
-                            } else {
-                                Some(Box::new(self.parse_expression()?))
-                            };
-
-                            self.expect(TokenType::RightBracket)?;
-                            expr = Expr::Slice {
-                                array: Box::new(expr),
-                                start: Some(Box::new(first)),
-                                end,
-                            };
-                        } else {
-                            // Regular indexing
-                            self.expect(TokenType::RightBracket)?;
-                            expr = Expr::Index {
-                                array: Box::new(expr),
-                                index: Box::new(first),
-                            };
-                        }
-                    }
+                    self.expect(TokenType::RightBracket)?;
+                    expr = Expr::Slice {
+                        array: Box::new(expr),
+                        start: Some(Box::new(first)),
+                        end,
+                    };
+                } else {
+                    // Regular indexing
+                    self.expect(TokenType::RightBracket)?;
+                    expr = Expr::Index {
+                        array: Box::new(expr),
+                        index: Box::new(first),
+                    };
                 }
-                _ => break,
             }
         }
 

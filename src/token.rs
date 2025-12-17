@@ -36,14 +36,14 @@ pub enum TokenType {
     Pipe,         // |
 
     // Operators
-    Equals,       // =
-    DoubleEquals, // ==
-    Plus,         // +
-    Minus,        // -
-    Star,         // *
-    Slash,        // /
-    Arrow,        // ->
-    Ellipsis,     // ...
+    Equals,             // =
+    DoubleEquals,       // ==
+    Plus,               // +
+    Minus,              // -
+    Star,               // *
+    Slash,              // /
+    Arrow,              // ->
+    Ellipsis,           // ...
     Percent,            // %
     LessThan,           // <
     GreaterThan,        // >

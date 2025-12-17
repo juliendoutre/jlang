@@ -71,17 +71,17 @@ pub enum Expr {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOperator {
-    Add,         // +
-    Subtract,    // -
-    Multiply,    // *
-    Divide,      // /
-    Equals,      // ==
-    Modulo,           // %
-    LessThan,         // <
-    GreaterThan,      // >
-    LessThanOrEqual,  // <=
+    Add,                // +
+    Subtract,           // -
+    Multiply,           // *
+    Divide,             // /
+    Equals,             // ==
+    Modulo,             // %
+    LessThan,           // <
+    GreaterThan,        // >
+    LessThanOrEqual,    // <=
     GreaterThanOrEqual, // >=
-    And,              // &
+    And,                // &
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

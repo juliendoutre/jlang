@@ -859,7 +859,10 @@ impl Interpreter {
                             if let Some(type_expr) = &return_param.type_expr {
                                 // Check if it's an array type
                                 match type_expr {
-                                    Expr::ArrayType { size, element_type: _ } => {
+                                    Expr::ArrayType {
+                                        size,
+                                        element_type: _,
+                                    } => {
                                         // Evaluate the size expression
                                         let size_val = self.eval_expr(size)?;
                                         let array_size = match size_val {
@@ -874,7 +877,7 @@ impl Interpreter {
                                             _ => {
                                                 return Err(RuntimeError::new(
                                                     "Array size must be an integer".to_string(),
-                                                ))
+                                                ));
                                             }
                                         };
                                         // Initialize with zeros
@@ -886,15 +889,14 @@ impl Interpreter {
                                     }
                                     _ => {
                                         // For non-array types, initialize with 0
-                                        self.env.define(
-                                            return_param.name.clone(),
-                                            Value::Integer(0),
-                                        );
+                                        self.env
+                                            .define(return_param.name.clone(), Value::Integer(0));
                                     }
                                 }
                             } else {
                                 // No type annotation, initialize with 0
-                                self.env.define(return_param.name.clone(), Value::Integer(0));
+                                self.env
+                                    .define(return_param.name.clone(), Value::Integer(0));
                             }
                         }
 
@@ -930,13 +932,11 @@ impl Interpreter {
                         }
 
                         // If no explicit return, return the first output parameter
-                        if !explicit_return && !returns.is_empty() {
-                            if let Some(output_param) = returns.first() {
-                                if let Ok(val) = self.env.get(&output_param.name) {
+                        if !explicit_return && !returns.is_empty()
+                            && let Some(output_param) = returns.first()
+                                && let Ok(val) = self.env.get(&output_param.name) {
                                     result = val;
                                 }
-                            }
-                        }
 
                         // Restore environment
                         for (name, value) in saved_bindings {
