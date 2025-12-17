@@ -76,10 +76,12 @@ pub enum BinaryOperator {
     Multiply,    // *
     Divide,      // /
     Equals,      // ==
-    Modulo,      // %
-    LessThan,    // <
-    GreaterThan, // >
-    And,         // &
+    Modulo,           // %
+    LessThan,         // <
+    GreaterThan,      // >
+    LessThanOrEqual,  // <=
+    GreaterThanOrEqual, // >=
+    And,              // &
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +91,13 @@ pub enum Statement {
 
     /// Variable assignment: a = card(A)
     Assignment { name: String, value: Expr },
+
+    /// Array element assignment: arr[i] = value
+    IndexAssignment {
+        array: String,
+        index: Expr,
+        value: Expr,
+    },
 
     /// Variable assignment with type constraint: n: BYTE = in()
     TypedAssignment {
@@ -115,6 +124,12 @@ pub enum Statement {
     For {
         variable: String,
         iterable: Expr,
+        body: Vec<Statement>,
+    },
+
+    /// If statement: if condition { body }
+    If {
+        condition: Expr,
         body: Vec<Statement>,
     },
 

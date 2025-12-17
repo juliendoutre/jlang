@@ -128,12 +128,62 @@ impl Interpreter {
                 let val = self.eval_expr(value)?;
                 self.env.define(name.clone(), val);
             }
+            Statement::IndexAssignment {
+                array,
+                index,
+                value,
+            } => {
+                // Get the array
+                let array_val = self.env.get(array)?;
+
+                // Evaluate index and value
+                let idx = match self.eval_expr(index)? {
+                    Value::Integer(i) => {
+                        if i < 0 {
+                            return Err(RuntimeError::new(
+                                "Array index cannot be negative".to_string(),
+                            ));
+                        }
+                        i as usize
+                    }
+                    _ => return Err(RuntimeError::new("Index must be an integer".to_string())),
+                };
+
+                let new_val = match self.eval_expr(value)? {
+                    Value::Integer(i) => i,
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "Array elements must be integers".to_string(),
+                        ));
+                    }
+                };
+
+                // Modify the array
+                match array_val {
+                    Value::Array(mut arr) => {
+                        if idx >= arr.len() {
+                            return Err(RuntimeError::new(format!(
+                                "Array index {} out of bounds (length: {})",
+                                idx,
+                                arr.len()
+                            )));
+                        }
+                        arr[idx] = new_val;
+                        self.env.define(array.clone(), Value::Array(arr));
+                    }
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "Can only index assign to arrays".to_string(),
+                        ));
+                    }
+                }
+            }
             Statement::TypedAssignment {
                 name,
                 type_expr,
                 value,
             } => {
-                // Check if this is an array type with in() call
+                // Check if this is an array type with stdin() call
                 if let (
                     Expr::ArrayType {
                         size,
@@ -144,7 +194,7 @@ impl Interpreter {
                         args,
                     },
                 ) = (type_expr, value)
-                    && func_name == "in"
+                    && func_name == "stdin"
                     && args.is_empty()
                 {
                     // Special handling for reading arrays
@@ -245,6 +295,27 @@ impl Interpreter {
                 // Restore the original value of the loop variable
                 if let Some(saved) = saved_value {
                     self.env.define(variable.clone(), saved);
+                }
+            }
+            Statement::If { condition, body } => {
+                // Evaluate the condition
+                let cond_val = self.eval_expr(condition)?;
+
+                // Check if condition is true (non-zero)
+                let is_true = match cond_val {
+                    Value::Integer(i) => i != 0,
+                    _ => {
+                        return Err(RuntimeError::new(
+                            "Condition must evaluate to an integer".to_string(),
+                        ));
+                    }
+                };
+
+                // Execute body if condition is true
+                if is_true {
+                    for stmt in body {
+                        self.execute_statement(stmt)?;
+                    }
                 }
             }
             Statement::Empty => {}
@@ -422,6 +493,12 @@ impl Interpreter {
                     }
                     (BinaryOperator::GreaterThan, Value::Integer(a), Value::Integer(b)) => {
                         Ok(Value::Integer(if a > b { 1 } else { 0 }))
+                    }
+                    (BinaryOperator::LessThanOrEqual, Value::Integer(a), Value::Integer(b)) => {
+                        Ok(Value::Integer(if a <= b { 1 } else { 0 }))
+                    }
+                    (BinaryOperator::GreaterThanOrEqual, Value::Integer(a), Value::Integer(b)) => {
+                        Ok(Value::Integer(if a >= b { 1 } else { 0 }))
                     }
                     (BinaryOperator::And, Value::Integer(a), Value::Integer(b)) => {
                         Ok(Value::Integer(if a != 0 && b != 0 { 1 } else { 0 }))
@@ -699,10 +776,10 @@ impl Interpreter {
                 }
             }
 
-            "out" => {
+            "stdout" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::new(format!(
-                        "out() expects 1 argument, got {}",
+                        "stdout() expects 1 argument, got {}",
                         args.len()
                     )));
                 }
@@ -711,7 +788,7 @@ impl Interpreter {
                 Ok(arg)
             }
 
-            "in" => {
+            "stdin" => {
                 // Read from standard input
                 if args.is_empty() {
                     // Read a single byte/integer
@@ -741,7 +818,7 @@ impl Interpreter {
                 match func_val {
                     Value::Function {
                         params,
-                        returns: _,
+                        returns,
                         body,
                     } => {
                         // Evaluate arguments
@@ -778,16 +855,19 @@ impl Interpreter {
 
                         // Execute function body
                         let mut result = Value::Integer(0);
+                        let mut explicit_return = false;
                         for (i, stmt) in body.iter().enumerate() {
                             let is_last = i == body.len() - 1;
                             match stmt {
                                 Statement::Return(expr) => {
                                     result = self.eval_expr(expr)?;
+                                    explicit_return = true;
                                     break;
                                 }
                                 Statement::ExpressionStatement(expr) if is_last => {
                                     // Last expression statement is implicitly returned
                                     result = self.eval_expr(expr)?;
+                                    explicit_return = true;
                                 }
                                 Statement::Assignment { name, value }
                                 | Statement::Definition { name, value } => {
@@ -795,10 +875,20 @@ impl Interpreter {
                                     self.env.define(name.clone(), val.clone());
                                     if is_last {
                                         result = val;
+                                        explicit_return = true;
                                     }
                                 }
                                 _ => {
                                     self.execute_statement(stmt)?;
+                                }
+                            }
+                        }
+
+                        // If no explicit return, return the first output parameter
+                        if !explicit_return && !returns.is_empty() {
+                            if let Some(output_param) = returns.first() {
+                                if let Ok(val) = self.env.get(&output_param.name) {
+                                    result = val;
                                 }
                             }
                         }

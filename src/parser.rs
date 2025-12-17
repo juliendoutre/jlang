@@ -132,12 +132,61 @@ where
                         body,
                     })
                 }
+                TokenType::If => {
+                    self.advance(); // consume 'if'
+
+                    // Parse condition
+                    let condition = self.parse_expression()?;
+
+                    // Expect '{'
+                    self.skip_newlines();
+                    self.expect(TokenType::LeftBrace)?;
+
+                    // Parse body
+                    let body = self.parse_function_body()?;
+
+                    // Expect '}'
+                    self.expect(TokenType::RightBrace)?;
+
+                    Ok(Statement::If { condition, body })
+                }
                 TokenType::Identifier(name) => {
                     let name = name.clone();
                     self.advance();
 
                     // Check if this is a definition/assignment or a function call
                     match self.peek() {
+                        Some(Token {
+                            token_type: TokenType::LeftBracket,
+                            ..
+                        }) => {
+                            // Could be array indexing: arr[i] = value
+                            self.advance(); // consume [
+                            let index = self.parse_expression()?;
+                            self.expect(TokenType::RightBracket)?;
+
+                            // Check if this is an assignment
+                            if let Some(Token {
+                                token_type: TokenType::Equals,
+                                ..
+                            }) = self.peek()
+                            {
+                                self.advance(); // consume =
+                                let value = self.parse_expression()?;
+                                Ok(Statement::IndexAssignment {
+                                    array: name,
+                                    index,
+                                    value,
+                                })
+                            } else {
+                                // Not an assignment, treat as expression statement
+                                let expr = Expr::Index {
+                                    array: Box::new(Expr::Identifier(name)),
+                                    index: Box::new(index),
+                                };
+                                Ok(Statement::ExpressionStatement(expr))
+                            }
+                        }
                         Some(Token {
                             token_type: TokenType::Colon,
                             ..
@@ -443,7 +492,10 @@ where
 
             // Parse statements - try normal statement parsing first,
             // but if it starts with a non-identifier/non-keyword, treat as expression statement
-            let stmt = if matches!(token.token_type, TokenType::Identifier(_) | TokenType::For) {
+            let stmt = if matches!(
+                token.token_type,
+                TokenType::Identifier(_) | TokenType::For | TokenType::If
+            ) {
                 self.parse_statement()?
             } else {
                 // Treat as expression statement
@@ -507,6 +559,8 @@ where
                 TokenType::DoubleEquals => (BinaryOperator::Equals, 0),
                 TokenType::LessThan => (BinaryOperator::LessThan, 0),
                 TokenType::GreaterThan => (BinaryOperator::GreaterThan, 0),
+                TokenType::LessThanOrEqual => (BinaryOperator::LessThanOrEqual, 0),
+                TokenType::GreaterThanOrEqual => (BinaryOperator::GreaterThanOrEqual, 0),
                 TokenType::Ampersand => (BinaryOperator::And, 0),
                 TokenType::Pipe => {
                     // Need to check if this is inside a set constraint
@@ -631,6 +685,15 @@ where
                 token_type: TokenType::Character(c),
                 ..
             }) => Ok(Expr::Character(c)),
+            Some(Token {
+                token_type: TokenType::LeftParen,
+                ..
+            }) => {
+                // Parenthesized expression
+                let expr = self.parse_expression()?;
+                self.expect(TokenType::RightParen)?;
+                Ok(expr)
+            }
             Some(Token {
                 token_type: TokenType::Identifier(name),
                 ..

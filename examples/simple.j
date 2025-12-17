@@ -35,6 +35,6 @@ a = card(B)
 b = 100 
 
 // Applying a function to a variable.
-// `out` is a builtin function printing out the value to the standard output.
-out(a)
-out(b)
+// `stdout` is a builtin function printing out the value to the standard output.
+stdout(a)
+stdout(b)

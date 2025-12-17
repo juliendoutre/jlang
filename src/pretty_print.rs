@@ -39,6 +39,16 @@ impl PrettyPrinter {
                 println!("{}Variable Assignment: {} = ", self.indent(), name);
                 self.print_expr(value, self.indent + 1);
             }
+            Statement::IndexAssignment {
+                array,
+                index,
+                value,
+            } => {
+                println!("{}Index Assignment: {}[", self.indent(), array);
+                self.print_expr(index, self.indent + 1);
+                println!("{}] = ", self.indent());
+                self.print_expr(value, self.indent + 1);
+            }
             Statement::TypedAssignment {
                 name,
                 type_expr,
@@ -93,6 +103,12 @@ impl PrettyPrinter {
                 println!("{}  variable: {}", self.indent(), variable);
                 println!("{}  iterable:", self.indent());
                 self.print_expr(iterable, self.indent + 2);
+                println!("{}  body: {} statements", self.indent(), body.len());
+            }
+            Statement::If { condition, body } => {
+                println!("{}If Statement:", self.indent());
+                println!("{}  condition:", self.indent());
+                self.print_expr(condition, self.indent + 2);
                 println!("{}  body: {} statements", self.indent(), body.len());
             }
             Statement::Empty => {

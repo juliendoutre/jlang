@@ -17,6 +17,7 @@ pub enum TokenType {
     // Keywords
     For,
     In,
+    If,
 
     // Literals
     Identifier(String),
@@ -43,12 +44,14 @@ pub enum TokenType {
     Slash,        // /
     Arrow,        // ->
     Ellipsis,     // ...
-    Percent,      // %
-    LessThan,     // <
-    GreaterThan,  // >
-    Ampersand,    // &
-    QuestionMark, // ?
-    Underscore,   // _
+    Percent,            // %
+    LessThan,           // <
+    GreaterThan,        // >
+    LessThanOrEqual,    // <=
+    GreaterThanOrEqual, // >=
+    Ampersand,          // &
+    QuestionMark,       // ?
+    Underscore,         // _
 
     // Special
     Newline,

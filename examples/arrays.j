@@ -2,7 +2,7 @@
 BYTE = { 0, ..., 255 }
 
 // Reading 10 bytes from the standard input.
-input: [10]BYTE = in()
+input: [10]BYTE = stdin()
 
 // Printing the first element of the input.
-out(input[0])
+stdout(input[0])

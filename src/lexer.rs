@@ -167,8 +167,24 @@ impl<'a> Lexer<'a> {
             Some('+') => Token::new(TokenType::Plus, position),
             Some('*') => Token::new(TokenType::Star, position),
             Some('%') => Token::new(TokenType::Percent, position),
-            Some('<') => Token::new(TokenType::LessThan, position),
-            Some('>') => Token::new(TokenType::GreaterThan, position),
+            Some('<') => {
+                // Check for <=
+                if let Some(&'=') = self.peek() {
+                    self.advance();
+                    Token::new(TokenType::LessThanOrEqual, position)
+                } else {
+                    Token::new(TokenType::LessThan, position)
+                }
+            }
+            Some('>') => {
+                // Check for >=
+                if let Some(&'=') = self.peek() {
+                    self.advance();
+                    Token::new(TokenType::GreaterThanOrEqual, position)
+                } else {
+                    Token::new(TokenType::GreaterThan, position)
+                }
+            }
             Some('&') => Token::new(TokenType::Ampersand, position),
             Some('?') => Token::new(TokenType::QuestionMark, position),
             Some('_') => Token::new(TokenType::Underscore, position),
@@ -221,6 +237,7 @@ impl<'a> Lexer<'a> {
                 let token_type = match identifier.as_str() {
                     "for" => TokenType::For,
                     "in" => TokenType::In,
+                    "if" => TokenType::If,
                     _ => TokenType::Identifier(identifier),
                 };
                 Token::new(token_type, position)
