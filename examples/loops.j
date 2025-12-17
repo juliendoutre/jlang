@@ -10,13 +10,13 @@ for n in numbers {
     sum = sum + n
 }
 
-out(sum)
+stdout(sum)
 
 // Create evens array and iterate over it.
 evens = [0, 2, ..., 8]
 
 for e in evens {
-    out(e)
+    stdout(e)
 }
 
 // Nested loops with slicing.
@@ -24,6 +24,6 @@ for i in [0, 1, 2] {
     end = i + 3
     
     for j in numbers[i:end] {
-        out(j)
+        stdout(j)
     }
 }
