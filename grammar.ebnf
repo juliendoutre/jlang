@@ -2,6 +2,7 @@
 program = { statement } ;
 
 statement = empty_statement
+          | import_statement
           | for_statement
           | if_statement
           | definition
@@ -12,6 +13,9 @@ statement = empty_statement
           | expression_statement ;
 
 empty_statement = newline ;
+
+(* Module System *)
+import_statement = "import" string_literal "sha256" string_literal "as" identifier ;
 
 (* Control Flow *)
 for_statement = "for" identifier "in" expression "{" { statement } "}" ;
@@ -58,13 +62,19 @@ postfix_operator = "[" expression "]"                    (* indexing *)
 primary_expr = integer
              | character
              | identifier
+             | qualified_name
              | function_call
+             | qualified_function_call
              | set_expr
              | array_expr
              | tuple_expr
              | "(" expression ")" ;
 
+qualified_name = identifier "::" identifier ;
+
 function_call = identifier "(" [ expression { "," expression } ] ")" ;
+
+qualified_function_call = identifier "::" identifier "(" [ expression { "," expression } ] ")" ;
 
 (* Set Expressions *)
 set_expr = "{" "}"                                                        (* empty set *)
@@ -102,6 +112,13 @@ lowercase_identifier = lowercase_letter { letter | digit | "_" } ;
 integer = digit { digit } ;
 
 character = "'" printable_char "'" ;
+
+string_literal = '"' { string_char } '"' ;
+
+string_char = ? any character except '"' and '\' ?
+            | escape_sequence ;
+
+escape_sequence = "\" ( "n" | "t" | "r" | "\" | "'" | '"' | "0" ) ;
 
 letter = uppercase_letter | lowercase_letter ;
 
