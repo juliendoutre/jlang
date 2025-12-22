@@ -4,7 +4,7 @@ use jlang::parser::Parser;
 
 fn run_program(source: &str) -> Result<(), String> {
     let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer);
+    let mut parser = Parser::new_with_source(lexer, source.to_string());
     let program = parser.parse().map_err(|e| e.message)?;
     let mut interpreter = Interpreter::new();
     interpreter.execute(&program).map_err(|e| e.message)

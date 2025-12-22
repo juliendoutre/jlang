@@ -1,5 +1,6 @@
 use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement, UnaryOperator};
-use crate::token::{Token, TokenType};
+use crate::error::{self, ParseError};
+use crate::token::{Position, Token, TokenType};
 use std::iter::Peekable;
 
 pub struct Parser<I>
@@ -7,19 +8,8 @@ where
     I: Iterator<Item = Token>,
 {
     tokens: Peekable<I>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParseError {
-    pub message: String,
-}
-
-impl ParseError {
-    fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
+    source: String,
+    current_position: Position,
 }
 
 impl<I> Parser<I>
@@ -29,6 +19,16 @@ where
     pub fn new(tokens: I) -> Self {
         Self {
             tokens: tokens.peekable(),
+            source: String::new(),
+            current_position: Position::new(1, 1),
+        }
+    }
+
+    pub fn new_with_source(tokens: I, source: String) -> Self {
+        Self {
+            tokens: tokens.peekable(),
+            source,
+            current_position: Position::new(1, 1),
         }
     }
 
@@ -39,7 +39,12 @@ where
 
     /// Consume and return the next token
     fn advance(&mut self) -> Option<Token> {
-        self.tokens.next()
+        if let Some(token) = self.tokens.next() {
+            self.current_position = token.position;
+            Some(token)
+        } else {
+            None
+        }
     }
 
     /// Skip newlines
@@ -62,12 +67,36 @@ where
             {
                 Ok(token)
             }
-            Some(token) => Err(ParseError::new(format!(
-                "Expected {:?}, found {:?}",
-                expected, token.token_type
-            ))),
-            None => Err(ParseError::new("Unexpected end of input")),
+            Some(token) => {
+                let expected_str = format!("{:?}", expected);
+                let found_str = format!("{:?}", token.token_type);
+                let suggestion = error::suggest_for_unexpected_token(&expected_str, &found_str);
+
+                Err(ParseError::new(format!("Expected {:?}, found {:?}", expected, token.token_type))
+                    .with_position(token.position)
+                    .with_source(self.source.clone())
+                    .with_suggestion(suggestion))
+            }
+            None => Err(ParseError::new("Unexpected end of input")
+                .with_position(self.current_position)
+                .with_source(self.source.clone())
+                .with_suggestion("File ended unexpectedly. Check for unclosed braces, parentheses, or brackets.")),
         }
+    }
+
+    /// Create an error at the current position
+    fn error(&self, message: impl Into<String>) -> ParseError {
+        ParseError::new(message)
+            .with_position(self.current_position)
+            .with_source(self.source.clone())
+    }
+
+    /// Create an error with a suggestion
+    fn error_with_suggestion(&self, message: impl Into<String>, suggestion: impl Into<String>) -> ParseError {
+        ParseError::new(message)
+            .with_position(self.current_position)
+            .with_source(self.source.clone())
+            .with_suggestion(suggestion)
     }
 
     /// Parse the entire program
@@ -101,7 +130,10 @@ where
                             token_type: TokenType::Identifier(name),
                             ..
                         }) => name,
-                        _ => return Err(ParseError::new("Expected identifier after 'for'")),
+                        _ => return Err(self.error_with_suggestion(
+                            "Expected identifier after 'for'",
+                            "Loop variable must be an identifier, like: for i in ..."
+                        )),
                     };
 
                     // Expect 'in'
@@ -110,7 +142,10 @@ where
                             token_type: TokenType::In,
                             ..
                         }) => {}
-                        _ => return Err(ParseError::new("Expected 'in' after loop variable")),
+                        _ => return Err(self.error_with_suggestion(
+                            "Expected 'in' after loop variable",
+                            "For loops use the syntax: for variable in iterable { ... }"
+                        )),
                     }
 
                     // Parse iterable expression
@@ -243,11 +278,12 @@ where
                                             })
                                             .collect()
                                     }
-                                    _ => {
-                                        return Err(ParseError::new(
-                                            "Function parameters must be a tuple".to_string(),
-                                        ));
-                                    }
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Function parameters must be a tuple",
+                                "Define parameters like: (x: INTEGER, y: INTEGER)"
+                            ));
+                        }
                                 };
 
                                 Ok(Statement::FunctionDefinition {
@@ -1254,7 +1290,10 @@ where
                                         self.advance();
                                         break;
                                     }
-                                    _ => return Err(ParseError::new("Expected ',' or '}' in set")),
+                                    _ => return Err(self.error_with_suggestion(
+                                        "Expected ',' or '}' in set",
+                                        "Sets use the syntax: {1, 2, 3} or {0, ..., 10}. Make sure to close all braces."
+                                    )),
                                 }
                             }
                             Ok(Expr::ExplicitSet(elements))
@@ -1373,13 +1412,13 @@ mod tests {
 
     fn parse_expr(input: &str) -> Result<Expr, ParseError> {
         let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new_with_source(lexer, input.to_string());
         parser.parse_expression()
     }
 
     fn parse(input: &str) -> Result<Program, ParseError> {
         let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new_with_source(lexer, input.to_string());
         parser.parse()
     }
 

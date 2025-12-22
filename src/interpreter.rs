@@ -1,4 +1,5 @@
 use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement, UnaryOperator};
+use crate::error;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -143,17 +144,7 @@ impl fmt::Display for Value {
     }
 }
 
-/// Runtime error
-#[derive(Debug, Clone)]
-pub struct RuntimeError {
-    pub message: String,
-}
-
-impl RuntimeError {
-    pub fn new(message: String) -> Self {
-        Self { message }
-    }
-}
+pub type RuntimeError = error::RuntimeError;
 
 type Result<T> = std::result::Result<T, RuntimeError>;
 
@@ -183,7 +174,10 @@ impl Environment {
         self.bindings
             .get(name)
             .cloned()
-            .ok_or_else(|| RuntimeError::new(format!("Undefined variable: {}", name)))
+            .ok_or_else(|| {
+                RuntimeError::new(format!("Undefined variable: {}", name))
+                    .with_suggestion(error::suggest_for_undefined_variable(name))
+            })
     }
 }
 
@@ -256,15 +250,16 @@ impl Interpreter {
                                 "Array index {} out of bounds (length: {})",
                                 idx,
                                 arr.len()
-                            )));
+                            ))
+                            .with_suggestion(error::suggest_for_array_out_of_bounds(idx, arr.len())));
                         }
                         arr[idx] = new_val;
                         self.env.define(array.clone(), Value::Array(arr));
                     }
                     _ => {
                         return Err(RuntimeError::new(
-                            "Can only index assign to arrays".to_string(),
-                        ));
+                            "Can only index assign to arrays"
+                        ).with_suggestion("Ensure the variable is an array before trying to assign to an index."));
                     }
                 }
             }
@@ -577,13 +572,15 @@ impl Interpreter {
                     }
                     (BinaryOperator::Divide, Value::Integer(a), Value::Integer(b)) => {
                         if b == 0 {
-                            return Err(RuntimeError::new("Division by zero".to_string()));
+                            return Err(RuntimeError::new("Division by zero")
+                                .with_suggestion(error::suggest_for_division_by_zero()));
                         }
                         Ok(Value::Integer(a / b))
                     }
                     (BinaryOperator::Modulo, Value::Integer(a), Value::Integer(b)) => {
                         if b == 0 {
-                            return Err(RuntimeError::new("Division by zero".to_string()));
+                            return Err(RuntimeError::new("Modulo by zero")
+                                .with_suggestion(error::suggest_for_division_by_zero()));
                         }
                         Ok(Value::Integer(a % b))
                     }
@@ -1151,7 +1148,7 @@ mod tests {
 
     fn eval(expr_str: &str) -> Result<Value> {
         let lexer = crate::lexer::Lexer::new(expr_str);
-        let mut parser = crate::parser::Parser::new(lexer);
+        let mut parser = crate::parser::Parser::new_with_source(lexer, expr_str.to_string());
         let expr = parser.parse_expression().map_err(|e| RuntimeError::new(e.message))?;
         let mut interpreter = Interpreter::new();
         interpreter.eval_expr(&expr)
@@ -1159,7 +1156,7 @@ mod tests {
 
     fn execute(program_str: &str) -> Result<()> {
         let lexer = crate::lexer::Lexer::new(program_str);
-        let mut parser = crate::parser::Parser::new(lexer);
+        let mut parser = crate::parser::Parser::new_with_source(lexer, program_str.to_string());
         let program = parser.parse().map_err(|e| RuntimeError::new(e.message))?;
         let mut interpreter = Interpreter::new();
         interpreter.execute(&program)

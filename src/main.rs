@@ -19,7 +19,7 @@ fn main() {
     let source = fs::read_to_string(filename).expect("Failed to read source file");
 
     let lexer = Lexer::new(&source);
-    let mut parser = Parser::new(lexer);
+    let mut parser = Parser::new_with_source(lexer, source.clone());
 
     match parser.parse() {
         Ok(program) => {
@@ -41,14 +41,14 @@ fn main() {
                         println!("\n✓ Program executed successfully!");
                     }
                     Err(err) => {
-                        eprintln!("\n✗ Runtime error: {}", err.message);
+                        eprintln!("\n{}", err);
                         std::process::exit(1);
                     }
                 }
             }
         }
         Err(err) => {
-            eprintln!("✗ Parse error: {}", err.message);
+            eprintln!("{}", err);
             std::process::exit(1);
         }
     }
