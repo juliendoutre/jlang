@@ -31,6 +31,16 @@ impl PrettyPrinter {
 
     fn print_statement(&self, stmt: &Statement) {
         match stmt {
+            Statement::Import {
+                url,
+                checksum,
+                alias,
+            } => {
+                println!("{}Import Statement:", self.indent());
+                println!("{}  url: {}", self.indent(), url);
+                println!("{}  checksum: {}", self.indent(), checksum);
+                println!("{}  alias: {}", self.indent(), alias);
+            }
             Statement::Definition { name, value } => {
                 println!("{}Type Definition: {} = ", self.indent(), name);
                 self.print_expr(value, self.indent + 1);
@@ -123,6 +133,9 @@ impl PrettyPrinter {
         match expr {
             Expr::Identifier(name) => {
                 println!("{}Identifier({})", indent_str, name);
+            }
+            Expr::QualifiedName { module, name } => {
+                println!("{}QualifiedName({}::{})", indent_str, module, name);
             }
             Expr::Integer(n) => {
                 println!("{}Integer({})", indent_str, n);

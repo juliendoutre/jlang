@@ -5,6 +5,9 @@ pub enum Expr {
     /// An identifier (variable or type name)
     Identifier(String),
 
+    /// A qualified name (module::name)
+    QualifiedName { module: String, name: String },
+
     /// An integer literal
     Integer(i64),
 
@@ -107,6 +110,13 @@ pub enum UnaryOperator {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    /// Import statement: import "file://./math.j" sha256 "abc123..." as math
+    Import {
+        url: String,
+        checksum: String,
+        alias: String,
+    },
+
     /// Type/set definition: A = { 0, 1, 2 }
     Definition { name: String, value: Expr },
 

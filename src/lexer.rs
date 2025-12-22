@@ -127,6 +127,35 @@ impl<'a> Lexer<'a> {
         Some(result)
     }
 
+    /// Parse a string literal (e.g., "hello")
+    fn parse_string(&mut self) -> Option<String> {
+        // We've already consumed the opening "
+        let mut result = String::new();
+
+        loop {
+            match self.advance() {
+                None => return None, // Unterminated string
+                Some('"') => break,  // End of string
+                Some('\\') => {
+                    // Handle escape sequences
+                    match self.advance()? {
+                        'n' => result.push('\n'),
+                        't' => result.push('\t'),
+                        'r' => result.push('\r'),
+                        '\\' => result.push('\\'),
+                        '\'' => result.push('\''),
+                        '"' => result.push('"'),
+                        '0' => result.push('\0'),
+                        c => result.push(c), // Unknown escape, just use the character
+                    }
+                }
+                Some(ch) => result.push(ch),
+            }
+        }
+
+        Some(result)
+    }
+
     /// Get the next token
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
@@ -162,7 +191,15 @@ impl<'a> Lexer<'a> {
             Some('[') => Token::new(TokenType::LeftBracket, position),
             Some(']') => Token::new(TokenType::RightBracket, position),
             Some(',') => Token::new(TokenType::Comma, position),
-            Some(':') => Token::new(TokenType::Colon, position),
+            Some(':') => {
+                // Check for ::
+                if let Some(&':') = self.peek() {
+                    self.advance();
+                    Token::new(TokenType::DoubleColon, position)
+                } else {
+                    Token::new(TokenType::Colon, position)
+                }
+            }
             Some('|') => Token::new(TokenType::Pipe, position),
             Some('+') => Token::new(TokenType::Plus, position),
             Some('*') => Token::new(TokenType::Star, position),
@@ -232,6 +269,15 @@ impl<'a> Lexer<'a> {
                     self.next_token()
                 }
             }
+            Some('"') => {
+                // String literal
+                if let Some(s) = self.parse_string() {
+                    Token::new(TokenType::String(s), position)
+                } else {
+                    // Invalid string literal, skip it
+                    self.next_token()
+                }
+            }
             Some(ch) if ch.is_alphabetic() => {
                 let identifier = self.parse_identifier(ch);
                 // Check for keywords
@@ -239,6 +285,9 @@ impl<'a> Lexer<'a> {
                     "for" => TokenType::For,
                     "in" => TokenType::In,
                     "if" => TokenType::If,
+                    "import" => TokenType::Import,
+                    "as" => TokenType::As,
+                    "sha256" => TokenType::Sha256,
                     _ => TokenType::Identifier(identifier),
                 };
                 Token::new(token_type, position)

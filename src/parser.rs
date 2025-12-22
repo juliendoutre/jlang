@@ -123,6 +123,85 @@ where
         match self.peek() {
             None => Ok(Statement::Empty),
             Some(token) => match &token.token_type {
+                TokenType::Import => {
+                    self.advance(); // consume 'import'
+
+                    // Parse URL (string literal)
+                    let url = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::String(s),
+                            ..
+                        }) => s,
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected string literal (URL) after 'import'",
+                                "Import syntax: import \"file://./module.j\" sha256 \"checksum\" as alias",
+                            ));
+                        }
+                    };
+
+                    // Expect 'sha256'
+                    match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::Sha256,
+                            ..
+                        }) => {}
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected 'sha256' keyword after import URL",
+                                "Import syntax: import \"file://./module.j\" sha256 \"checksum\" as alias",
+                            ));
+                        }
+                    }
+
+                    // Parse checksum (string literal)
+                    let checksum = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::String(s),
+                            ..
+                        }) => s,
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected string literal (SHA256 checksum) after 'sha256'",
+                                "Import syntax: import \"file://./module.j\" sha256 \"checksum\" as alias",
+                            ));
+                        }
+                    };
+
+                    // Expect 'as'
+                    match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::As,
+                            ..
+                        }) => {}
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected 'as' keyword after checksum",
+                                "Import syntax: import \"file://./module.j\" sha256 \"checksum\" as alias",
+                            ));
+                        }
+                    }
+
+                    // Parse alias (identifier)
+                    let alias = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::Identifier(name),
+                            ..
+                        }) => name,
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected identifier after 'as'",
+                                "Module alias must be a valid identifier, like: import \"...\" sha256 \"...\" as math",
+                            ));
+                        }
+                    };
+
+                    Ok(Statement::Import {
+                        url,
+                        checksum,
+                        alias,
+                    })
+                }
                 TokenType::For => {
                     self.advance(); // consume 'for'
 
@@ -944,8 +1023,50 @@ where
                 token_type: TokenType::Identifier(name),
                 ..
             }) => {
-                // Check for function call
+                // Check for qualified name (module::name)
                 if let Some(Token {
+                    token_type: TokenType::DoubleColon,
+                    ..
+                }) = self.peek()
+                {
+                    self.advance(); // consume ::
+
+                    // Parse the name after ::
+                    let qualified_name = match self.advance() {
+                        Some(Token {
+                            token_type: TokenType::Identifier(n),
+                            ..
+                        }) => n,
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected identifier after '::'",
+                                "Qualified names use the syntax: module::name",
+                            ));
+                        }
+                    };
+
+                    // Check for function call on qualified name
+                    if let Some(Token {
+                        token_type: TokenType::LeftParen,
+                        ..
+                    }) = self.peek()
+                    {
+                        self.advance(); // consume (
+                        let args = self.parse_function_args()?;
+                        self.expect(TokenType::RightParen)?;
+                        Ok(Expr::FunctionCall {
+                            name: format!("{}::{}", name, qualified_name),
+                            args,
+                        })
+                    } else {
+                        Ok(Expr::QualifiedName {
+                            module: name,
+                            name: qualified_name,
+                        })
+                    }
+                }
+                // Check for function call
+                else if let Some(Token {
                     token_type: TokenType::LeftParen,
                     ..
                 }) = self.peek()

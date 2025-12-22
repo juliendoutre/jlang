@@ -1,5 +1,6 @@
 use crate::ast::{BinaryOperator, Expr, Parameter, Program, Statement, UnaryOperator};
 use crate::error;
+use crate::module_loader::ModuleLoader;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -178,15 +179,32 @@ impl Environment {
     }
 }
 
+/// Module metadata stored for lazy initialization
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct ModuleInfo {
+    url: String,
+    checksum: String,
+    program: Program,
+}
+
 /// The interpreter for executing programs
 pub struct Interpreter {
     env: Environment,
+    module_loader: ModuleLoader,
+    /// Module info by alias (for lazy loading)
+    module_info: HashMap<String, ModuleInfo>,
+    /// Module environments (initialized lazily)
+    module_envs: HashMap<String, Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
             env: Environment::new(),
+            module_loader: ModuleLoader::new(),
+            module_info: HashMap::new(),
+            module_envs: HashMap::new(),
         }
     }
 
@@ -198,9 +216,101 @@ impl Interpreter {
         Ok(())
     }
 
+    /// Lazily initialize a module's environment (execute it once, cache result)
+    fn ensure_module_initialized(&mut self, alias: &str) -> Result<()> {
+        // Check if already initialized
+        if self.module_envs.contains_key(alias) {
+            return Ok(());
+        }
+
+        // Get module info
+        let module_info = self
+            .module_info
+            .get(alias)
+            .ok_or_else(|| {
+                RuntimeError::new(format!("Module '{}' not imported", alias)).with_suggestion(
+                    format!(
+                        "Add 'import \"...\" sha256 \"...\" as {}' before using it",
+                        alias
+                    ),
+                )
+            })?
+            .clone();
+
+        // Create a new interpreter for the module with its own environment
+        let mut module_interpreter = Interpreter {
+            env: Environment::new(),
+            module_loader: ModuleLoader::new(),
+            module_info: HashMap::new(),
+            module_envs: HashMap::new(),
+        };
+
+        // Execute the module to populate its environment
+        // ONLY execute definitions - skip side effects like stdout() calls
+        for stmt in &module_info.program.statements {
+            match stmt {
+                // Skip import statements in modules to avoid re-processing
+                Statement::Import { .. } => continue,
+
+                // Allow type/set definitions
+                Statement::Definition { .. } => {
+                    module_interpreter.execute_statement(stmt).map_err(|e| {
+                        RuntimeError::new(format!("Error executing module '{}': {}", alias, e))
+                    })?;
+                }
+
+                // Allow function definitions
+                Statement::FunctionDefinition { .. } => {
+                    module_interpreter.execute_statement(stmt).map_err(|e| {
+                        RuntimeError::new(format!("Error executing module '{}': {}", alias, e))
+                    })?;
+                }
+
+                // Skip all other statements (side effects)
+                // This includes:
+                // - ExpressionStatement (stdout, etc)
+                // - Assignment without type
+                // - TypedAssignment (could have side effects)
+                // - Return, For, If, etc.
+                _ => {
+                    // Optionally warn or error here
+                    // For now, silently skip
+                }
+            }
+        }
+
+        // Cache the initialized environment
+        self.module_envs
+            .insert(alias.to_string(), module_interpreter.env);
+
+        Ok(())
+    }
+
     /// Execute a single statement
     fn execute_statement(&mut self, statement: &Statement) -> Result<()> {
         match statement {
+            Statement::Import {
+                url,
+                checksum,
+                alias,
+            } => {
+                // Load and parse the module (do NOT execute yet)
+                let program = self
+                    .module_loader
+                    .load_module(url, checksum)
+                    .map_err(|e| RuntimeError::new(format!("Failed to import module: {}", e)))?
+                    .clone();
+
+                // Store module info for lazy initialization
+                self.module_info.insert(
+                    alias.clone(),
+                    ModuleInfo {
+                        url: url.clone(),
+                        checksum: checksum.clone(),
+                        program,
+                    },
+                );
+            }
             Statement::Definition { name, value } => {
                 let val = self.eval_expr(value)?;
                 self.env.define(name.clone(), val);
@@ -413,6 +523,21 @@ impl Interpreter {
     fn eval_expr(&mut self, expr: &Expr) -> Result<Value> {
         match expr {
             Expr::Identifier(name) => self.env.get(name),
+
+            Expr::QualifiedName { module, name } => {
+                // Ensure module is initialized (lazy execution)
+                self.ensure_module_initialized(module)?;
+
+                // Look up the value in the module's environment
+                let module_env = self.module_envs.get(module).unwrap(); // Safe after ensure_module_initialized
+                module_env.get(name).map_err(|_| {
+                    RuntimeError::new(format!("Name '{}' not found in module '{}'", name, module))
+                        .with_suggestion(format!(
+                            "Check that '{}' is defined in the imported module",
+                            name
+                        ))
+                })
+            }
 
             Expr::Integer(i) => Ok(Value::Integer(*i)),
 
@@ -912,6 +1037,116 @@ impl Interpreter {
 
     /// Call a function (builtin or user-defined)
     fn call_function(&mut self, name: &str, args: &[Expr]) -> Result<Value> {
+        // Check if it's a qualified function call (module::function)
+        if name.contains("::") {
+            let parts: Vec<&str> = name.split("::").collect();
+            if parts.len() != 2 {
+                return Err(RuntimeError::new(format!(
+                    "Invalid qualified name: {}",
+                    name
+                )));
+            }
+
+            let module = parts[0];
+            let func_name = parts[1];
+
+            // Ensure module is initialized (lazy execution)
+            self.ensure_module_initialized(module)?;
+
+            // Get the module's environment and clone what we need
+            let (func_value, module_bindings) = {
+                let module_env = self.module_envs.get(module).unwrap(); // Safe after ensure_module_initialized
+
+                let func_value = module_env.get(func_name).map_err(|_| {
+                    RuntimeError::new(format!(
+                        "Function '{}' not found in module '{}'",
+                        func_name, module
+                    ))
+                })?;
+
+                // Clone the module bindings and function value to avoid borrow issues
+                (func_value.clone(), module_env.bindings.clone())
+            };
+
+            // Call the function
+            match func_value {
+                Value::Function {
+                    params,
+                    returns,
+                    body,
+                } => {
+                    // Evaluate arguments
+                    let mut arg_values = Vec::new();
+                    for arg_expr in args {
+                        arg_values.push(self.eval_expr(arg_expr)?);
+                    }
+
+                    // Check argument count
+                    if arg_values.len() != params.len() {
+                        return Err(RuntimeError::new(format!(
+                            "Function {}::{} expects {} arguments, got {}",
+                            module,
+                            func_name,
+                            params.len(),
+                            arg_values.len()
+                        )));
+                    }
+
+                    // Save current environment and temporarily use module's environment
+                    let saved_env = std::mem::take(&mut self.env);
+
+                    // Copy all module bindings into the current environment
+                    for (name, value) in module_bindings {
+                        self.env.define(name.clone(), value.clone());
+                    }
+
+                    // Bind input parameters
+                    for (param, value) in params.iter().zip(arg_values.iter()) {
+                        self.env.define(param.name.clone(), value.clone());
+                    }
+
+                    // Initialize output parameters
+                    for return_param in returns.iter() {
+                        self.env
+                            .define(return_param.name.clone(), Value::Integer(0));
+                    }
+
+                    // Execute function body
+                    let mut result = Value::Integer(0);
+                    for stmt in body.iter() {
+                        match stmt {
+                            Statement::Return(expr) => {
+                                result = self.eval_expr(expr)?;
+                                break;
+                            }
+                            _ => {
+                                self.execute_statement(stmt)?;
+                            }
+                        }
+                    }
+
+                    // If no explicit return and we have output parameters, collect them
+                    if returns.len() == 1 {
+                        result = self.env.get(&returns[0].name)?;
+                    }
+
+                    // Restore original environment
+                    self.env = saved_env;
+
+                    Ok(result)
+                }
+                _ => Err(RuntimeError::new(format!(
+                    "'{}' in module '{}' is not a function",
+                    func_name, module
+                ))),
+            }
+        } else {
+            // Regular function call (not qualified)
+            self.call_local_function(name, args)
+        }
+    }
+
+    fn call_local_function(&mut self, name: &str, args: &[Expr]) -> Result<Value> {
         // Check for builtin functions first
         match name {
             "card" => {

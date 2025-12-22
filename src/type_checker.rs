@@ -164,6 +164,10 @@ impl TypeChecker {
 
     fn check_statement(&mut self, statement: &Statement) {
         match statement {
+            Statement::Import { .. } => {
+                // Import statements are handled at runtime
+                // We could add module type checking here in the future
+            }
             Statement::Definition { name, value } => {
                 let value_type = self.infer_expr_type(value);
                 self.env.define(name.clone(), value_type);
@@ -413,6 +417,12 @@ impl TypeChecker {
                 // Don't report error here, it will be caught at runtime or during use
                 Type::Unknown
             }),
+            Expr::QualifiedName { .. } => {
+                // Qualified names refer to imported module members
+                // We can't easily check their types without loading the module
+                // So we'll just return Unknown and let runtime handle it
+                Type::Unknown
+            }
             Expr::ExplicitSet(elements) => {
                 if elements.is_empty() {
                     return Type::Set(Box::new(Type::Unknown));

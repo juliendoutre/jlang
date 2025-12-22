@@ -18,11 +18,15 @@ pub enum TokenType {
     For,
     In,
     If,
+    Import,
+    As,
+    Sha256,
 
     // Literals
     Identifier(String),
     Integer(i64),
     Character(char),
+    String(String),
 
     // Punctuation
     LeftBrace,    // {
@@ -33,6 +37,7 @@ pub enum TokenType {
     RightBracket, // ]
     Comma,        // ,
     Colon,        // :
+    DoubleColon,  // ::
     Pipe,         // |
     Dot,          // .
 

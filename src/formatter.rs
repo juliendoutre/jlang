@@ -46,6 +46,17 @@ impl Formatter {
         match statement {
             Statement::Empty => String::new(),
 
+            Statement::Import {
+                url,
+                checksum,
+                alias,
+            } => {
+                format!(
+                    "{}import \"{}\" sha256 \"{}\" as {}",
+                    indent, url, checksum, alias
+                )
+            }
+
             Statement::Definition { name, value } => {
                 format!("{}{} = {}", indent, name, self.format_expr(value))
             }
@@ -191,6 +202,8 @@ impl Formatter {
             },
 
             Expr::Identifier(name) => name.clone(),
+
+            Expr::QualifiedName { module, name } => format!("{}::{}", module, name),
 
             Expr::ExplicitSet(elements) => {
                 if elements.is_empty() {
