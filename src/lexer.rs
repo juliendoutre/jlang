@@ -266,3 +266,264 @@ impl<'a> Iterator for Lexer<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_input() {
+        let mut lexer = Lexer::new("");
+        assert_eq!(lexer.next_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_single_character_tokens() {
+        let input = "{ } ( ) [ ] , : . | + - * / % ^ < > = & ? _";
+        let mut lexer = Lexer::new(input);
+
+        let expected = vec![
+            TokenType::LeftBrace,
+            TokenType::RightBrace,
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::LeftBracket,
+            TokenType::RightBracket,
+            TokenType::Comma,
+            TokenType::Colon,
+            TokenType::Dot,
+            TokenType::Pipe,
+            TokenType::Plus,
+            TokenType::Minus,
+            TokenType::Star,
+            TokenType::Slash,
+            TokenType::Percent,
+            TokenType::Caret,
+            TokenType::LessThan,
+            TokenType::GreaterThan,
+            TokenType::Equals,
+            TokenType::Ampersand,
+            TokenType::QuestionMark,
+            TokenType::Underscore,
+        ];
+
+        for expected_type in expected {
+            assert_eq!(lexer.next_token().token_type, expected_type);
+        }
+    }
+
+    #[test]
+    fn test_multi_character_operators() {
+        let input = "== <= >= -> ...";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().token_type, TokenType::DoubleEquals);
+        assert_eq!(lexer.next_token().token_type, TokenType::LessThanOrEqual);
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::GreaterThanOrEqual
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Arrow);
+        assert_eq!(lexer.next_token().token_type, TokenType::Ellipsis);
+    }
+
+    #[test]
+    fn test_keywords() {
+        let input = "for in if";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().token_type, TokenType::For);
+        assert_eq!(lexer.next_token().token_type, TokenType::In);
+        assert_eq!(lexer.next_token().token_type, TokenType::If);
+    }
+
+    #[test]
+    fn test_identifiers() {
+        let input = "foo bar test123 CamelCase UPPER_CASE test_var";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("foo".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("bar".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("test123".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("CamelCase".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("UPPER_CASE".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("test_var".to_string())
+        );
+    }
+
+    #[test]
+    fn test_integers() {
+        let input = "0 42 123456789";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().token_type, TokenType::Integer(0));
+        assert_eq!(lexer.next_token().token_type, TokenType::Integer(42));
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Integer(123456789)
+        );
+    }
+
+    #[test]
+    fn test_characters() {
+        let input = "'a' 'Z' '0' ' '";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('a'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('Z'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('0'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character(' '));
+    }
+
+    #[test]
+    fn test_character_escape_sequences() {
+        let input = "'\\n' '\\t' '\\r' '\\\\' '\\'' '\\\"' '\\0'";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('\n'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('\t'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('\r'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('\\'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('\''));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('"'));
+        assert_eq!(lexer.next_token().token_type, TokenType::Character('\0'));
+    }
+
+    #[test]
+    fn test_comments() {
+        let input = "foo // this is a comment\nbar";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("foo".to_string())
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Newline);
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("bar".to_string())
+        );
+    }
+
+    #[test]
+    fn test_division_vs_comment() {
+        let input = "a/b // comment\n10/2";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("a".to_string())
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Slash);
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("b".to_string())
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Newline);
+        assert_eq!(lexer.next_token().token_type, TokenType::Integer(10));
+        assert_eq!(lexer.next_token().token_type, TokenType::Slash);
+        assert_eq!(lexer.next_token().token_type, TokenType::Integer(2));
+    }
+
+    #[test]
+    fn test_newlines() {
+        let input = "a\nb\n\nc";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("a".to_string())
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Newline);
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("b".to_string())
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Newline);
+        assert_eq!(lexer.next_token().token_type, TokenType::Newline);
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("c".to_string())
+        );
+    }
+
+    #[test]
+    fn test_whitespace_handling() {
+        let input = "  a  \t  b  ";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("a".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().token_type,
+            TokenType::Identifier("b".to_string())
+        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_iterator_trait() {
+        let input = "a b c";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<Token> = lexer.collect();
+
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(
+            tokens[0].token_type,
+            TokenType::Identifier("a".to_string())
+        );
+        assert_eq!(
+            tokens[1].token_type,
+            TokenType::Identifier("b".to_string())
+        );
+        assert_eq!(
+            tokens[2].token_type,
+            TokenType::Identifier("c".to_string())
+        );
+    }
+
+    #[test]
+    fn test_position_tracking() {
+        let input = "a\nbc";
+        let mut lexer = Lexer::new(input);
+
+        let token1 = lexer.next_token();
+        assert_eq!(token1.position.line, 1);
+        assert_eq!(token1.position.column, 1);
+
+        let token2 = lexer.next_token(); // newline
+        assert_eq!(token2.position.line, 1);
+
+        let token3 = lexer.next_token();
+        assert_eq!(token3.position.line, 2);
+        assert_eq!(token3.position.column, 1);
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let input = "fib = (x: N) -> (result: N) { result = x + 1 }";
+        let mut lexer = Lexer::new(input);
+
+        // Just verify we can tokenize it without panicking
+        while lexer.next_token().token_type != TokenType::Eof {}
+    }
+}

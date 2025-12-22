@@ -539,7 +539,7 @@ where
     }
 
     /// Parse an expression
-    fn parse_expression(&mut self) -> Result<Expr, ParseError> {
+    pub fn parse_expression(&mut self) -> Result<Expr, ParseError> {
         self.parse_binary_expr(0)
     }
 
@@ -1363,5 +1363,409 @@ where
         }
 
         Ok(fields)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+
+    fn parse_expr(input: &str) -> Result<Expr, ParseError> {
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        parser.parse_expression()
+    }
+
+    fn parse(input: &str) -> Result<Program, ParseError> {
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        parser.parse()
+    }
+
+    #[test]
+    fn test_parse_integer() {
+        let result = parse_expr("42").unwrap();
+        assert_eq!(result, Expr::Integer(42));
+    }
+
+    #[test]
+    fn test_parse_character() {
+        let result = parse_expr("'a'").unwrap();
+        assert_eq!(result, Expr::Character('a'));
+    }
+
+    #[test]
+    fn test_parse_identifier() {
+        let result = parse_expr("foo").unwrap();
+        assert_eq!(result, Expr::Identifier("foo".to_string()));
+    }
+
+    #[test]
+    fn test_parse_binary_addition() {
+        let result = parse_expr("1 + 2").unwrap();
+        match result {
+            Expr::BinaryOp {
+                op,
+                left,
+                right,
+            } => {
+                assert_eq!(op, BinaryOperator::Add);
+                assert_eq!(*left, Expr::Integer(1));
+                assert_eq!(*right, Expr::Integer(2));
+            }
+            _ => panic!("Expected BinaryOp"),
+        }
+    }
+
+    #[test]
+    fn test_parse_binary_precedence() {
+        let result = parse_expr("2 + 3 * 4").unwrap();
+        match result {
+            Expr::BinaryOp {
+                op: BinaryOperator::Add,
+                left,
+                right,
+            } => {
+                assert_eq!(*left, Expr::Integer(2));
+                match *right {
+                    Expr::BinaryOp {
+                        op: BinaryOperator::Multiply,
+                        left: mult_left,
+                        right: mult_right,
+                    } => {
+                        assert_eq!(*mult_left, Expr::Integer(3));
+                        assert_eq!(*mult_right, Expr::Integer(4));
+                    }
+                    _ => panic!("Expected multiply operation on right side"),
+                }
+            }
+            _ => panic!("Expected addition at top level"),
+        }
+    }
+
+    #[test]
+    fn test_parse_unary_negation() {
+        let result = parse_expr("-5").unwrap();
+        match result {
+            Expr::UnaryOp { op, operand } => {
+                assert_eq!(op, UnaryOperator::Negate);
+                assert_eq!(*operand, Expr::Integer(5));
+            }
+            _ => panic!("Expected UnaryOp"),
+        }
+    }
+
+    #[test]
+    fn test_parse_parenthesized_expr() {
+        let result = parse_expr("(2 + 3)").unwrap();
+        match result {
+            Expr::BinaryOp { op, left, right } => {
+                assert_eq!(op, BinaryOperator::Add);
+                assert_eq!(*left, Expr::Integer(2));
+                assert_eq!(*right, Expr::Integer(3));
+            }
+            _ => panic!("Expected BinaryOp"),
+        }
+    }
+
+    #[test]
+    fn test_parse_function_call() {
+        let result = parse_expr("foo(1, 2)").unwrap();
+        match result {
+            Expr::FunctionCall { name, args } => {
+                assert_eq!(name, "foo");
+                assert_eq!(args.len(), 2);
+                assert_eq!(args[0], Expr::Integer(1));
+                assert_eq!(args[1], Expr::Integer(2));
+            }
+            _ => panic!("Expected FunctionCall"),
+        }
+    }
+
+    #[test]
+    fn test_parse_function_call_no_args() {
+        let result = parse_expr("stdin()").unwrap();
+        match result {
+            Expr::FunctionCall { name, args } => {
+                assert_eq!(name, "stdin");
+                assert_eq!(args.len(), 0);
+            }
+            _ => panic!("Expected FunctionCall"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_literal() {
+        let result = parse_expr("[1, 2, 3]").unwrap();
+        match result {
+            Expr::ArrayLiteral(elements) => {
+                assert_eq!(elements.len(), 3);
+                assert_eq!(elements[0], Expr::Integer(1));
+                assert_eq!(elements[1], Expr::Integer(2));
+                assert_eq!(elements[2], Expr::Integer(3));
+            }
+            _ => panic!("Expected ArrayLiteral"),
+        }
+    }
+
+    #[test]
+    fn test_parse_empty_array() {
+        let result = parse_expr("[]").unwrap();
+        match result {
+            Expr::ArrayLiteral(elements) => {
+                assert_eq!(elements.len(), 0);
+            }
+            _ => panic!("Expected ArrayLiteral"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_range() {
+        let result = parse_expr("[0, ..., 10]").unwrap();
+        match result {
+            Expr::ArrayRange { start, step, end } => {
+                assert_eq!(*start, Expr::Integer(0));
+                assert!(step.is_none());
+                assert_eq!(*end, Expr::Integer(10));
+            }
+            _ => panic!("Expected ArrayRange"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_index() {
+        let result = parse_expr("arr[5]").unwrap();
+        match result {
+            Expr::Index { array, index } => {
+                assert_eq!(*array, Expr::Identifier("arr".to_string()));
+                assert_eq!(*index, Expr::Integer(5));
+            }
+            _ => panic!("Expected Index"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_slice() {
+        let result = parse_expr("arr[1:5]").unwrap();
+        match result {
+            Expr::Slice { array, start, end } => {
+                assert_eq!(*array, Expr::Identifier("arr".to_string()));
+                assert_eq!(*start.clone().unwrap(), Expr::Integer(1));
+                assert_eq!(*end.clone().unwrap(), Expr::Integer(5));
+            }
+            _ => panic!("Expected Slice"),
+        }
+    }
+
+    #[test]
+    fn test_parse_explicit_set() {
+        let result = parse_expr("{1, 2, 3}").unwrap();
+        match result {
+            Expr::ExplicitSet(elements) => {
+                assert_eq!(elements.len(), 3);
+            }
+            _ => panic!("Expected ExplicitSet"),
+        }
+    }
+
+    #[test]
+    fn test_parse_range_set() {
+        let result = parse_expr("{0, ..., 10}").unwrap();
+        match result {
+            Expr::RangeSet { start, step, end } => {
+                assert_eq!(*start, Expr::Integer(0));
+                assert!(step.is_none());
+                assert_eq!(*end, Expr::Integer(10));
+            }
+            _ => panic!("Expected RangeSet"),
+        }
+    }
+
+    #[test]
+    fn test_parse_tuple_literal() {
+        let result = parse_expr("(x: 1, y: 2)").unwrap();
+        match result {
+            Expr::TupleLiteral { fields } => {
+                assert_eq!(fields.len(), 2);
+                assert_eq!(fields[0].0, "x");
+                assert_eq!(fields[0].1, Expr::Integer(1));
+                assert_eq!(fields[1].0, "y");
+                assert_eq!(fields[1].1, Expr::Integer(2));
+            }
+            _ => panic!("Expected TupleLiteral"),
+        }
+    }
+
+    #[test]
+    fn test_parse_field_access() {
+        let result = parse_expr("tuple.field").unwrap();
+        match result {
+            Expr::FieldAccess { object, field } => {
+                assert_eq!(*object, Expr::Identifier("tuple".to_string()));
+                assert_eq!(field, "field");
+            }
+            _ => panic!("Expected FieldAccess"),
+        }
+    }
+
+    #[test]
+    fn test_parse_assignment() {
+        let result = parse("x = 42").unwrap();
+        assert_eq!(result.statements.len(), 1);
+        match &result.statements[0] {
+            Statement::Assignment { name, value } => {
+                assert_eq!(name, "x");
+                assert_eq!(*value, Expr::Integer(42));
+            }
+            _ => panic!("Expected Assignment"),
+        }
+    }
+
+    #[test]
+    fn test_parse_definition() {
+        let result = parse("X = {1, 2, 3}").unwrap();
+        assert_eq!(result.statements.len(), 1);
+        match &result.statements[0] {
+            Statement::Definition { name, .. } => {
+                assert_eq!(name, "X");
+            }
+            _ => panic!("Expected Definition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_typed_assignment() {
+        let result = parse("n: BYTE = stdin()").unwrap();
+        assert_eq!(result.statements.len(), 1);
+        match &result.statements[0] {
+            Statement::TypedAssignment { name, .. } => {
+                assert_eq!(name, "n");
+            }
+            _ => panic!("Expected TypedAssignment"),
+        }
+    }
+
+    #[test]
+    fn test_parse_if_statement() {
+        let result = parse("if x == 0 { y = 1 }").unwrap();
+        assert_eq!(result.statements.len(), 1);
+        match &result.statements[0] {
+            Statement::If { condition, body } => {
+                match condition {
+                    Expr::BinaryOp { op, .. } => {
+                        assert_eq!(*op, BinaryOperator::Equals);
+                    }
+                    _ => panic!("Expected BinaryOp in condition"),
+                }
+                assert_eq!(body.len(), 1);
+            }
+            _ => panic!("Expected If"),
+        }
+    }
+
+    #[test]
+    fn test_parse_for_loop() {
+        let result = parse("for i in [0, 1, 2] { x = i }").unwrap();
+        assert_eq!(result.statements.len(), 1);
+        match &result.statements[0] {
+            Statement::For {
+                variable,
+                iterable,
+                body,
+            } => {
+                assert_eq!(variable, "i");
+                match iterable {
+                    Expr::ArrayLiteral(_) => {}
+                    _ => panic!("Expected ArrayLiteral"),
+                }
+                assert_eq!(body.len(), 1);
+            }
+            _ => panic!("Expected For"),
+        }
+    }
+
+    #[test]
+    fn test_parse_function_definition() {
+        let input = "add = (x: INTEGER, y: INTEGER) -> (result: INTEGER) { result = x + y }";
+        let result = parse(input).unwrap();
+        assert_eq!(result.statements.len(), 1);
+        match &result.statements[0] {
+            Statement::FunctionDefinition {
+                name,
+                params,
+                returns,
+                body,
+            } => {
+                assert_eq!(name, "add");
+                assert_eq!(params.len(), 2);
+                assert_eq!(returns.len(), 1);
+                assert_eq!(body.len(), 1);
+            }
+            _ => panic!("Expected FunctionDefinition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_statements() {
+        let input = "x = 1\ny = 2\nz = x + y";
+        let result = parse(input).unwrap();
+        assert_eq!(result.statements.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_comparisons() {
+        assert!(parse_expr("a < b").is_ok());
+        assert!(parse_expr("a > b").is_ok());
+        assert!(parse_expr("a <= b").is_ok());
+        assert!(parse_expr("a >= b").is_ok());
+        assert!(parse_expr("a == b").is_ok());
+    }
+
+    #[test]
+    fn test_parse_power() {
+        let result = parse_expr("2 ^ 3").unwrap();
+        match result {
+            Expr::BinaryOp {
+                op: BinaryOperator::Power,
+                left,
+                right,
+            } => {
+                assert_eq!(*left, Expr::Integer(2));
+                assert_eq!(*right, Expr::Integer(3));
+            }
+            _ => panic!("Expected power operation"),
+        }
+    }
+
+    #[test]
+    fn test_parse_modulo() {
+        let result = parse_expr("10 % 3").unwrap();
+        match result {
+            Expr::BinaryOp {
+                op: BinaryOperator::Modulo,
+                ..
+            } => {}
+            _ => panic!("Expected modulo operation"),
+        }
+    }
+
+    #[test]
+    fn test_parse_error_unexpected_eof() {
+        let result = parse_expr("1 +");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_empty_program() {
+        let result = parse("").unwrap();
+        assert_eq!(result.statements.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_with_newlines() {
+        let input = "\n\nx = 1\n\n\ny = 2\n\n";
+        let result = parse(input).unwrap();
+        assert_eq!(result.statements.len(), 2);
     }
 }

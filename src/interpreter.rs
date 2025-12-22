@@ -1144,3 +1144,400 @@ impl Default for Interpreter {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn eval(expr_str: &str) -> Result<Value> {
+        let lexer = crate::lexer::Lexer::new(expr_str);
+        let mut parser = crate::parser::Parser::new(lexer);
+        let expr = parser.parse_expression().map_err(|e| RuntimeError::new(e.message))?;
+        let mut interpreter = Interpreter::new();
+        interpreter.eval_expr(&expr)
+    }
+
+    fn execute(program_str: &str) -> Result<()> {
+        let lexer = crate::lexer::Lexer::new(program_str);
+        let mut parser = crate::parser::Parser::new(lexer);
+        let program = parser.parse().map_err(|e| RuntimeError::new(e.message))?;
+        let mut interpreter = Interpreter::new();
+        interpreter.execute(&program)
+    }
+
+    #[test]
+    fn test_eval_integer() {
+        let result = eval("42").unwrap();
+        assert_eq!(result, Value::Integer(42));
+    }
+
+    #[test]
+    fn test_eval_character() {
+        let result = eval("'a'").unwrap();
+        assert_eq!(result, Value::Integer(97)); // ASCII value
+    }
+
+    #[test]
+    fn test_eval_addition() {
+        let result = eval("2 + 3").unwrap();
+        assert_eq!(result, Value::Integer(5));
+    }
+
+    #[test]
+    fn test_eval_subtraction() {
+        let result = eval("10 - 3").unwrap();
+        assert_eq!(result, Value::Integer(7));
+    }
+
+    #[test]
+    fn test_eval_multiplication() {
+        let result = eval("4 * 5").unwrap();
+        assert_eq!(result, Value::Integer(20));
+    }
+
+    #[test]
+    fn test_eval_division() {
+        let result = eval("15 / 3").unwrap();
+        assert_eq!(result, Value::Integer(5));
+    }
+
+    #[test]
+    fn test_eval_division_by_zero() {
+        let result = eval("10 / 0");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_eval_modulo() {
+        let result = eval("17 % 5").unwrap();
+        assert_eq!(result, Value::Integer(2));
+    }
+
+    #[test]
+    fn test_eval_power() {
+        let result = eval("2 ^ 3").unwrap();
+        assert_eq!(result, Value::Integer(8));
+    }
+
+    #[test]
+    fn test_eval_power_zero() {
+        let result = eval("5 ^ 0").unwrap();
+        assert_eq!(result, Value::Integer(1));
+    }
+
+    #[test]
+    fn test_eval_negation() {
+        let result = eval("-5").unwrap();
+        assert_eq!(result, Value::Integer(-5));
+    }
+
+    #[test]
+    fn test_eval_comparison_equals() {
+        assert_eq!(eval("5 == 5").unwrap(), Value::Integer(1));
+        assert_eq!(eval("5 == 6").unwrap(), Value::Integer(0));
+    }
+
+    #[test]
+    fn test_eval_comparison_less_than() {
+        assert_eq!(eval("3 < 5").unwrap(), Value::Integer(1));
+        assert_eq!(eval("5 < 3").unwrap(), Value::Integer(0));
+    }
+
+    #[test]
+    fn test_eval_comparison_greater_than() {
+        assert_eq!(eval("5 > 3").unwrap(), Value::Integer(1));
+        assert_eq!(eval("3 > 5").unwrap(), Value::Integer(0));
+    }
+
+    #[test]
+    fn test_eval_comparison_less_or_equal() {
+        assert_eq!(eval("3 <= 5").unwrap(), Value::Integer(1));
+        assert_eq!(eval("5 <= 5").unwrap(), Value::Integer(1));
+        assert_eq!(eval("6 <= 5").unwrap(), Value::Integer(0));
+    }
+
+    #[test]
+    fn test_eval_and() {
+        assert_eq!(eval("1 & 1").unwrap(), Value::Integer(1));
+        assert_eq!(eval("1 & 0").unwrap(), Value::Integer(0));
+        assert_eq!(eval("0 & 1").unwrap(), Value::Integer(0));
+    }
+
+    #[test]
+    fn test_eval_array_literal() {
+        let result = eval("[1, 2, 3]").unwrap();
+        match result {
+            Value::Array(arr) => {
+                assert_eq!(arr, vec![1, 2, 3]);
+            }
+            _ => panic!("Expected Array"),
+        }
+    }
+
+    #[test]
+    fn test_eval_array_range() {
+        let result = eval("[0, ..., 5]").unwrap();
+        match result {
+            Value::Array(arr) => {
+                assert_eq!(arr, vec![0, 1, 2, 3, 4, 5]);
+            }
+            _ => panic!("Expected Array"),
+        }
+    }
+
+    #[test]
+    fn test_eval_array_range_with_step() {
+        let result = eval("[0, 2, ..., 10]").unwrap();
+        match result {
+            Value::Array(arr) => {
+                assert_eq!(arr, vec![0, 2, 4, 6, 8, 10]);
+            }
+            _ => panic!("Expected Array"),
+        }
+    }
+
+    #[test]
+    fn test_eval_explicit_set() {
+        let result = eval("{1, 2, 3}").unwrap();
+        match result {
+            Value::Set(SetValue::Materialized(set)) => {
+                assert_eq!(set.len(), 3);
+                assert!(set.contains(&1));
+                assert!(set.contains(&2));
+                assert!(set.contains(&3));
+            }
+            _ => panic!("Expected Set"),
+        }
+    }
+
+    #[test]
+    fn test_eval_range_set() {
+        let result = eval("{0, ..., 10}").unwrap();
+        match result {
+            Value::Set(SetValue::Range { start, end, step }) => {
+                assert_eq!(start, 0);
+                assert_eq!(end, 10);
+                assert_eq!(step, 1);
+            }
+            _ => panic!("Expected Range Set"),
+        }
+    }
+
+    #[test]
+    fn test_eval_tuple_literal() {
+        let result = eval("(x: 3, y: 4)").unwrap();
+        match result {
+            Value::Tuple(fields) => {
+                assert_eq!(fields.get("x"), Some(&3));
+                assert_eq!(fields.get("y"), Some(&4));
+            }
+            _ => panic!("Expected Tuple"),
+        }
+    }
+
+    #[test]
+    fn test_execute_assignment() {
+        execute("x = 42").unwrap();
+    }
+
+    #[test]
+    fn test_execute_definition() {
+        execute("X = {1, 2, 3}").unwrap();
+    }
+
+    #[test]
+    fn test_execute_variable_reference() {
+        let program = "x = 5\ny = x + 3";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_if_true() {
+        let program = "x = 0\nif 1 { x = 5 }";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_if_false() {
+        let program = "x = 0\nif 0 { x = 5 }";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_for_loop_array() {
+        let program = "sum = 0\nfor i in [1, 2, 3] { sum = sum + i }";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_for_loop_set() {
+        let program = "sum = 0\nfor i in {1, 2, 3} { sum = sum + i }";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_array_indexing() {
+        let program = "arr = [10, 20, 30]\nx = arr[1]";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_array_index_assignment() {
+        let program = "arr = [1, 2, 3]\narr[1] = 10";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_array_slice() {
+        let program = "arr = [1, 2, 3, 4, 5]\nsliced = arr[1:4]";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_field_access() {
+        let program = "point = (x: 10, y: 20)\na = point.x";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_execute_function_definition_and_call() {
+        let program = "add = (x: INTEGER, y: INTEGER) -> (result: INTEGER) { result = x + y }\nz = add(3, 4)";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_builtin_card_set() {
+        let program = "S = {1, 2, 3, 4, 5}\nn = card(S)";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_builtin_card_array() {
+        let program = "arr = [1, 2, 3]\nn = card(arr)";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_builtin_len() {
+        let program = "arr = [1, 2, 3]\nn = len(arr)";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_set_cardinality() {
+        let set = SetValue::Range {
+            start: 0,
+            end: 10,
+            step: 1,
+        };
+        assert_eq!(set.cardinality().unwrap(), 11);
+    }
+
+    #[test]
+    fn test_set_cardinality_negative_step() {
+        let set = SetValue::Range {
+            start: 10,
+            end: 0,
+            step: -1,
+        };
+        assert_eq!(set.cardinality().unwrap(), 11);
+    }
+
+    #[test]
+    fn test_set_materialize_small() {
+        let set = SetValue::Range {
+            start: 0,
+            end: 5,
+            step: 1,
+        };
+        let materialized = set.materialize().unwrap();
+        assert_eq!(materialized.len(), 6);
+        assert!(materialized.contains(&0));
+        assert!(materialized.contains(&5));
+    }
+
+    #[test]
+    fn test_environment_define_and_get() {
+        let mut env = Environment::new();
+        env.define("x".to_string(), Value::Integer(42));
+        assert_eq!(env.get("x").unwrap(), Value::Integer(42));
+    }
+
+    #[test]
+    fn test_environment_undefined_variable() {
+        let env = Environment::new();
+        assert!(env.get("undefined").is_err());
+    }
+
+    #[test]
+    fn test_value_display_integer() {
+        let val = Value::Integer(42);
+        assert_eq!(format!("{}", val), "42");
+    }
+
+    #[test]
+    fn test_value_display_array() {
+        let val = Value::Array(vec![1, 2, 3]);
+        assert_eq!(format!("{}", val), "[1, 2, 3]");
+    }
+
+    #[test]
+    fn test_value_display_tuple() {
+        let mut fields = HashMap::new();
+        fields.insert("x".to_string(), 1);
+        fields.insert("y".to_string(), 2);
+        let val = Value::Tuple(fields);
+        let display = format!("{}", val);
+        assert!(display.contains("x: 1"));
+        assert!(display.contains("y: 2"));
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let result = eval("2 * (3 + 4)").unwrap();
+        assert_eq!(result, Value::Integer(14));
+    }
+
+    #[test]
+    fn test_nested_array_access() {
+        let program = "arr = [1, 2, 3]\nx = arr[arr[0]]";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_fibonacci_like_recursion() {
+        let program = r#"
+            fib = (n: INTEGER) -> (result: INTEGER) {
+                if n == 0 { result = 0 }
+                if n == 1 { result = 1 }
+                if n >= 2 { result = fib(n - 1) + fib(n - 2) }
+            }
+            x = fib(5)
+        "#;
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_implicit_set_with_constraint() {
+        let program = "EVEN = {x: {0, ..., 10} | x % 2 == 0}";
+        execute(program).unwrap();
+    }
+
+    #[test]
+    fn test_array_out_of_bounds() {
+        let program = "arr = [1, 2, 3]\nx = arr[10]";
+        assert!(execute(program).is_err());
+    }
+
+    #[test]
+    fn test_negative_power() {
+        let result = eval("2 ^ -1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_integer_overflow_power() {
+        let result = eval("999999 ^ 999999");
+        assert!(result.is_err());
+    }
+}
