@@ -233,12 +233,13 @@ impl TypeChecker {
 
                 // Check array type and element compatibility
                 if let Type::Array(_, elem_type) = array_type
-                    && !value_type.is_compatible_with(&elem_type) {
-                        self.errors.push(ParseError::new(format!(
-                            "Type mismatch in array assignment: expected {}, got {}",
-                            elem_type, value_type
-                        )));
-                    }
+                    && !value_type.is_compatible_with(&elem_type)
+                {
+                    self.errors.push(ParseError::new(format!(
+                        "Type mismatch in array assignment: expected {}, got {}",
+                        elem_type, value_type
+                    )));
+                }
             }
             Statement::FunctionDefinition {
                 name,
