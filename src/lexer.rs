@@ -319,10 +319,7 @@ mod tests {
 
         assert_eq!(lexer.next_token().token_type, TokenType::DoubleEquals);
         assert_eq!(lexer.next_token().token_type, TokenType::LessThanOrEqual);
-        assert_eq!(
-            lexer.next_token().token_type,
-            TokenType::GreaterThanOrEqual
-        );
+        assert_eq!(lexer.next_token().token_type, TokenType::GreaterThanOrEqual);
         assert_eq!(lexer.next_token().token_type, TokenType::Arrow);
         assert_eq!(lexer.next_token().token_type, TokenType::Ellipsis);
     }
@@ -375,10 +372,7 @@ mod tests {
 
         assert_eq!(lexer.next_token().token_type, TokenType::Integer(0));
         assert_eq!(lexer.next_token().token_type, TokenType::Integer(42));
-        assert_eq!(
-            lexer.next_token().token_type,
-            TokenType::Integer(123456789)
-        );
+        assert_eq!(lexer.next_token().token_type, TokenType::Integer(123456789));
     }
 
     #[test]
@@ -487,18 +481,9 @@ mod tests {
         let tokens: Vec<Token> = lexer.collect();
 
         assert_eq!(tokens.len(), 3);
-        assert_eq!(
-            tokens[0].token_type,
-            TokenType::Identifier("a".to_string())
-        );
-        assert_eq!(
-            tokens[1].token_type,
-            TokenType::Identifier("b".to_string())
-        );
-        assert_eq!(
-            tokens[2].token_type,
-            TokenType::Identifier("c".to_string())
-        );
+        assert_eq!(tokens[0].token_type, TokenType::Identifier("a".to_string()));
+        assert_eq!(tokens[1].token_type, TokenType::Identifier("b".to_string()));
+        assert_eq!(tokens[2].token_type, TokenType::Identifier("c".to_string()));
     }
 
     #[test]

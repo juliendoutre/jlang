@@ -107,9 +107,9 @@ impl Type {
                 if f1.len() != f2.len() {
                     return false;
                 }
-                f1.iter().zip(f2.iter()).all(|((n1, t1), (n2, t2))| {
-                    n1 == n2 && t1.is_compatible_with(t2)
-                })
+                f1.iter()
+                    .zip(f2.iter())
+                    .all(|((n1, t1), (n2, t2))| n1 == n2 && t1.is_compatible_with(t2))
             }
             _ => false,
         }
@@ -179,10 +179,12 @@ impl TypeChecker {
                                 "Type mismatch in assignment to '{}': expected {}, got {}",
                                 name, expected_type, value_type
                             ))
-                            .with_suggestion(error::suggest_for_type_mismatch(
-                                &expected_type.to_string(),
-                                &value_type.to_string(),
-                            )),
+                            .with_suggestion(
+                                error::suggest_for_type_mismatch(
+                                    &expected_type.to_string(),
+                                    &value_type.to_string(),
+                                ),
+                            ),
                         );
                     }
                 } else {
@@ -230,14 +232,13 @@ impl TypeChecker {
                 }
 
                 // Check array type and element compatibility
-                if let Type::Array(_, elem_type) = array_type {
-                    if !value_type.is_compatible_with(&elem_type) {
+                if let Type::Array(_, elem_type) = array_type
+                    && !value_type.is_compatible_with(&elem_type) {
                         self.errors.push(ParseError::new(format!(
                             "Type mismatch in array assignment: expected {}, got {}",
                             elem_type, value_type
                         )));
                     }
-                }
             }
             Statement::FunctionDefinition {
                 name,
@@ -272,26 +273,25 @@ impl TypeChecker {
                     .map(|p| {
                         p.type_expr
                             .as_ref()
-                            .map(|e| {
-                                match e {
-                                    Expr::Identifier(type_name) => {
-                                        self.env.get(type_name).cloned().and_then(|ty| {
-                                            match &ty {
-                                                Type::Set(elem_type) => {
-                                                    if **elem_type == Type::Integer {
-                                                        Some(Type::Integer)
-                                                    } else if matches!(&**elem_type, Type::Tuple(_)) {
-                                                        Some((**elem_type).clone())
-                                                    } else {
-                                                        Some(ty)
-                                                    }
-                                                }
-                                                _ => Some(ty),
+                            .map(|e| match e {
+                                Expr::Identifier(type_name) => self
+                                    .env
+                                    .get(type_name)
+                                    .cloned()
+                                    .map(|ty| match &ty {
+                                        Type::Set(elem_type) => {
+                                            if **elem_type == Type::Integer {
+                                                Type::Integer
+                                            } else if matches!(&**elem_type, Type::Tuple(_)) {
+                                                (**elem_type).clone()
+                                            } else {
+                                                ty
                                             }
-                                        }).unwrap_or(Type::Unknown)
-                                    }
-                                    _ => Type::Unknown,
-                                }
+                                        }
+                                        _ => ty,
+                                    })
+                                    .unwrap_or(Type::Unknown),
+                                _ => Type::Unknown,
                             })
                             .unwrap_or(Type::Unknown)
                     })
@@ -302,26 +302,25 @@ impl TypeChecker {
                     .map(|p| {
                         p.type_expr
                             .as_ref()
-                            .map(|e| {
-                                match e {
-                                    Expr::Identifier(type_name) => {
-                                        self.env.get(type_name).cloned().and_then(|ty| {
-                                            match &ty {
-                                                Type::Set(elem_type) => {
-                                                    if **elem_type == Type::Integer {
-                                                        Some(Type::Integer)
-                                                    } else if matches!(&**elem_type, Type::Tuple(_)) {
-                                                        Some((**elem_type).clone())
-                                                    } else {
-                                                        Some(ty)
-                                                    }
-                                                }
-                                                _ => Some(ty),
+                            .map(|e| match e {
+                                Expr::Identifier(type_name) => self
+                                    .env
+                                    .get(type_name)
+                                    .cloned()
+                                    .map(|ty| match &ty {
+                                        Type::Set(elem_type) => {
+                                            if **elem_type == Type::Integer {
+                                                Type::Integer
+                                            } else if matches!(&**elem_type, Type::Tuple(_)) {
+                                                (**elem_type).clone()
+                                            } else {
+                                                ty
                                             }
-                                        }).unwrap_or(Type::Unknown)
-                                    }
-                                    _ => Type::Unknown,
-                                }
+                                        }
+                                        _ => ty,
+                                    })
+                                    .unwrap_or(Type::Unknown),
+                                _ => Type::Unknown,
                             })
                             .unwrap_or(Type::Unknown)
                     })
@@ -368,7 +367,9 @@ impl TypeChecker {
                 if !cond_type.is_compatible_with(&Type::Integer) {
                     self.errors.push(
                         ParseError::new("Condition must be an integer (used as boolean)")
-                            .with_suggestion("Use comparison operators like ==, <, > to create conditions"),
+                            .with_suggestion(
+                                "Use comparison operators like ==, <, > to create conditions",
+                            ),
                     );
                 }
 
@@ -387,16 +388,12 @@ impl TypeChecker {
                 if let Some(ty) = self.env.get(type_name) {
                     match ty {
                         // Set of integers is treated as integer type
-                        Type::Set(elem_type) if **elem_type == Type::Integer => {
-                            Type::Integer
-                        }
+                        Type::Set(elem_type) if **elem_type == Type::Integer => Type::Integer,
                         // Set of tuples is treated as tuple type
-                        Type::Set(elem_type) => {
-                            match &**elem_type {
-                                Type::Tuple(_) => (**elem_type).clone(),
-                                _ => ty.clone(),
-                            }
-                        }
+                        Type::Set(elem_type) => match &**elem_type {
+                            Type::Tuple(_) => (**elem_type).clone(),
+                            _ => ty.clone(),
+                        },
                         _ => ty.clone(),
                     }
                 } else {
@@ -411,14 +408,10 @@ impl TypeChecker {
         match expr {
             Expr::Integer(_) => Type::Integer,
             Expr::Character(_) => Type::Character,
-            Expr::Identifier(name) => self
-                .env
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| {
-                    // Don't report error here, it will be caught at runtime or during use
-                    Type::Unknown
-                }),
+            Expr::Identifier(name) => self.env.get(name).cloned().unwrap_or({
+                // Don't report error here, it will be caught at runtime or during use
+                Type::Unknown
+            }),
             Expr::ExplicitSet(elements) => {
                 if elements.is_empty() {
                     return Type::Set(Box::new(Type::Unknown));
@@ -447,12 +440,16 @@ impl TypeChecker {
                 if let Some(step_expr) = step {
                     let step_ty = self.infer_expr_type(step_expr);
                     if !step_ty.is_compatible_with(&Type::Integer) {
-                        self.errors.push(ParseError::new("Range step must be an integer"));
+                        self.errors
+                            .push(ParseError::new("Range step must be an integer"));
                     }
                 }
 
-                if !start_ty.is_compatible_with(&Type::Integer) || !end_ty.is_compatible_with(&Type::Integer) {
-                    self.errors.push(ParseError::new("Range bounds must be integers"));
+                if !start_ty.is_compatible_with(&Type::Integer)
+                    || !end_ty.is_compatible_with(&Type::Integer)
+                {
+                    self.errors
+                        .push(ParseError::new("Range bounds must be integers"));
                 }
 
                 Type::Set(Box::new(Type::Integer))
@@ -535,9 +532,8 @@ impl TypeChecker {
                     "stdin" => Type::Integer,
                     "stdout" => {
                         if args.len() != 1 {
-                            self.errors.push(ParseError::new(
-                                "stdout() expects 1 argument",
-                            ));
+                            self.errors
+                                .push(ParseError::new("stdout() expects 1 argument"));
                         }
                         Type::Integer
                     }
@@ -574,10 +570,8 @@ impl TypeChecker {
                                 // Return first return type
                                 returns.first().cloned().unwrap_or(Type::Unknown)
                             } else {
-                                self.errors.push(ParseError::new(format!(
-                                    "{} is not a function",
-                                    name
-                                )));
+                                self.errors
+                                    .push(ParseError::new(format!("{} is not a function", name)));
                                 Type::Unknown
                             }
                         } else {
@@ -586,10 +580,7 @@ impl TypeChecker {
                     }
                 }
             }
-            Expr::ArrayType {
-                size,
-                element_type,
-            } => {
+            Expr::ArrayType { size, element_type } => {
                 let size_val = if let Expr::Integer(n) = **size {
                     Some(n as usize)
                 } else {
@@ -604,7 +595,8 @@ impl TypeChecker {
                 let index_ty = self.infer_expr_type(index);
 
                 if !index_ty.is_compatible_with(&Type::Integer) {
-                    self.errors.push(ParseError::new("Array index must be an integer"));
+                    self.errors
+                        .push(ParseError::new("Array index must be an integer"));
                 }
 
                 match array_ty {
@@ -643,18 +635,14 @@ impl TypeChecker {
             Expr::TupleType { fields } => {
                 let field_types: Vec<(String, Type)> = fields
                     .iter()
-                    .map(|(name, type_expr)| {
-                        (name.clone(), self.infer_expr_type(type_expr))
-                    })
+                    .map(|(name, type_expr)| (name.clone(), self.infer_expr_type(type_expr)))
                     .collect();
                 Type::Tuple(field_types)
             }
             Expr::TupleLiteral { fields } => {
                 let field_types: Vec<(String, Type)> = fields
                     .iter()
-                    .map(|(name, value_expr)| {
-                        (name.clone(), self.infer_expr_type(value_expr))
-                    })
+                    .map(|(name, value_expr)| (name.clone(), self.infer_expr_type(value_expr)))
                     .collect();
                 Type::Tuple(field_types)
             }
@@ -670,12 +658,10 @@ impl TypeChecker {
                                 Type::Set(elem_type) if **elem_type == Type::Integer => {
                                     Type::Integer
                                 }
-                                Type::Set(elem_type) => {
-                                    match &**elem_type {
-                                        Type::Tuple(_) => (**elem_type).clone(),
-                                        _ => ty.clone(),
-                                    }
-                                }
+                                Type::Set(elem_type) => match &**elem_type {
+                                    Type::Tuple(_) => (**elem_type).clone(),
+                                    _ => ty.clone(),
+                                },
                                 _ => ty.clone(),
                             }
                         })
@@ -687,9 +673,8 @@ impl TypeChecker {
                             Type::Unknown
                         }),
                     _ => {
-                        self.errors.push(ParseError::new(
-                            "Field access is only supported on tuples",
-                        ));
+                        self.errors
+                            .push(ParseError::new("Field access is only supported on tuples"));
                         Type::Unknown
                     }
                 }
@@ -783,4 +768,3 @@ mod tests {
         assert!(!Type::Integer.is_compatible_with(&Type::Set(Box::new(Type::Integer))));
     }
 }
-

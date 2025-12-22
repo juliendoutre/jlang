@@ -448,4 +448,3 @@ point3 = (x: point1.x + point2.x, y: point1.y + point2.y, z: point1.z + point2.z
 
     assert!(run_program(source).is_ok());
 }
-

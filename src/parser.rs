@@ -72,27 +72,29 @@ where
                 let found_str = format!("{:?}", token.token_type);
                 let suggestion = error::suggest_for_unexpected_token(&expected_str, &found_str);
 
-                Err(ParseError::new(format!("Expected {:?}, found {:?}", expected, token.token_type))
-                    .with_position(token.position)
-                    .with_source(self.source.clone())
-                    .with_suggestion(suggestion))
+                Err(ParseError::new(format!(
+                    "Expected {:?}, found {:?}",
+                    expected, token.token_type
+                ))
+                .with_position(token.position)
+                .with_source(self.source.clone())
+                .with_suggestion(suggestion))
             }
             None => Err(ParseError::new("Unexpected end of input")
                 .with_position(self.current_position)
                 .with_source(self.source.clone())
-                .with_suggestion("File ended unexpectedly. Check for unclosed braces, parentheses, or brackets.")),
+                .with_suggestion(
+                    "File ended unexpectedly. Check for unclosed braces, parentheses, or brackets.",
+                )),
         }
     }
 
-    /// Create an error at the current position
-    fn error(&self, message: impl Into<String>) -> ParseError {
-        ParseError::new(message)
-            .with_position(self.current_position)
-            .with_source(self.source.clone())
-    }
-
     /// Create an error with a suggestion
-    fn error_with_suggestion(&self, message: impl Into<String>, suggestion: impl Into<String>) -> ParseError {
+    fn error_with_suggestion(
+        &self,
+        message: impl Into<String>,
+        suggestion: impl Into<String>,
+    ) -> ParseError {
         ParseError::new(message)
             .with_position(self.current_position)
             .with_source(self.source.clone())
@@ -130,10 +132,12 @@ where
                             token_type: TokenType::Identifier(name),
                             ..
                         }) => name,
-                        _ => return Err(self.error_with_suggestion(
-                            "Expected identifier after 'for'",
-                            "Loop variable must be an identifier, like: for i in ..."
-                        )),
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected identifier after 'for'",
+                                "Loop variable must be an identifier, like: for i in ...",
+                            ));
+                        }
                     };
 
                     // Expect 'in'
@@ -142,10 +146,12 @@ where
                             token_type: TokenType::In,
                             ..
                         }) => {}
-                        _ => return Err(self.error_with_suggestion(
-                            "Expected 'in' after loop variable",
-                            "For loops use the syntax: for variable in iterable { ... }"
-                        )),
+                        _ => {
+                            return Err(self.error_with_suggestion(
+                                "Expected 'in' after loop variable",
+                                "For loops use the syntax: for variable in iterable { ... }",
+                            ));
+                        }
                     }
 
                     // Parse iterable expression
@@ -278,12 +284,12 @@ where
                                             })
                                             .collect()
                                     }
-                        _ => {
-                            return Err(self.error_with_suggestion(
-                                "Function parameters must be a tuple",
-                                "Define parameters like: (x: INTEGER, y: INTEGER)"
-                            ));
-                        }
+                                    _ => {
+                                        return Err(self.error_with_suggestion(
+                                            "Function parameters must be a tuple",
+                                            "Define parameters like: (x: INTEGER, y: INTEGER)",
+                                        ));
+                                    }
                                 };
 
                                 Ok(Statement::FunctionDefinition {
@@ -1444,11 +1450,7 @@ mod tests {
     fn test_parse_binary_addition() {
         let result = parse_expr("1 + 2").unwrap();
         match result {
-            Expr::BinaryOp {
-                op,
-                left,
-                right,
-            } => {
+            Expr::BinaryOp { op, left, right } => {
                 assert_eq!(op, BinaryOperator::Add);
                 assert_eq!(*left, Expr::Integer(1));
                 assert_eq!(*right, Expr::Integer(2));

@@ -382,9 +382,7 @@ mod tests {
 
         match stmt {
             Statement::For {
-                variable,
-                iterable,
-                ..
+                variable, iterable, ..
             } => {
                 assert_eq!(variable, "i");
                 match iterable {

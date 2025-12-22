@@ -40,7 +40,10 @@ impl ParseError {
         let mut output = String::new();
 
         // Error header
-        output.push_str(&format!("\x1b[1;31merror:\x1b[0m \x1b[1m{}\x1b[0m\n", self.message));
+        output.push_str(&format!(
+            "\x1b[1;31merror:\x1b[0m \x1b[1m{}\x1b[0m\n",
+            self.message
+        ));
 
         // Position and source snippet
         if let (Some(pos), Some(source)) = (&self.position, &self.source) {
@@ -60,7 +63,11 @@ impl ParseError {
             let line_num_width = (end_line + 1).to_string().len();
 
             // Empty line before snippet
-            output.push_str(&format!("{:width$} \x1b[1;34m|\x1b[0m\n", "", width = line_num_width));
+            output.push_str(&format!(
+                "{:width$} \x1b[1;34m|\x1b[0m\n",
+                "",
+                width = line_num_width
+            ));
 
             for i in start_line..=end_line {
                 if i >= lines.len() {
@@ -99,7 +106,11 @@ impl ParseError {
             }
 
             // Empty line after snippet
-            output.push_str(&format!("{:width$} \x1b[1;34m|\x1b[0m\n", "", width = line_num_width));
+            output.push_str(&format!(
+                "{:width$} \x1b[1;34m|\x1b[0m\n",
+                "",
+                width = line_num_width
+            ));
         }
 
         // Suggestion
@@ -151,7 +162,10 @@ impl RuntimeError {
     pub fn format_error(&self) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("\x1b[1;31mruntime error:\x1b[0m \x1b[1m{}\x1b[0m\n", self.message));
+        output.push_str(&format!(
+            "\x1b[1;31mruntime error:\x1b[0m \x1b[1m{}\x1b[0m\n",
+            self.message
+        ));
 
         if let Some(pos) = &self.position {
             output.push_str(&format!(
@@ -278,4 +292,3 @@ mod tests {
         assert!(suggestion.contains("5"));
     }
 }
-

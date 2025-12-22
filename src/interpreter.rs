@@ -171,13 +171,10 @@ impl Environment {
     }
 
     pub fn get(&self, name: &str) -> Result<Value> {
-        self.bindings
-            .get(name)
-            .cloned()
-            .ok_or_else(|| {
-                RuntimeError::new(format!("Undefined variable: {}", name))
-                    .with_suggestion(error::suggest_for_undefined_variable(name))
-            })
+        self.bindings.get(name).cloned().ok_or_else(|| {
+            RuntimeError::new(format!("Undefined variable: {}", name))
+                .with_suggestion(error::suggest_for_undefined_variable(name))
+        })
     }
 }
 
@@ -251,7 +248,9 @@ impl Interpreter {
                                 idx,
                                 arr.len()
                             ))
-                            .with_suggestion(error::suggest_for_array_out_of_bounds(idx, arr.len())));
+                            .with_suggestion(
+                                error::suggest_for_array_out_of_bounds(idx, arr.len()),
+                            ));
                         }
                         arr[idx] = new_val;
                         self.env.define(array.clone(), Value::Array(arr));
@@ -1149,7 +1148,9 @@ mod tests {
     fn eval(expr_str: &str) -> Result<Value> {
         let lexer = crate::lexer::Lexer::new(expr_str);
         let mut parser = crate::parser::Parser::new_with_source(lexer, expr_str.to_string());
-        let expr = parser.parse_expression().map_err(|e| RuntimeError::new(e.message))?;
+        let expr = parser
+            .parse_expression()
+            .map_err(|e| RuntimeError::new(e.message))?;
         let mut interpreter = Interpreter::new();
         interpreter.eval_expr(&expr)
     }
@@ -1398,7 +1399,8 @@ mod tests {
 
     #[test]
     fn test_execute_function_definition_and_call() {
-        let program = "add = (x: INTEGER, y: INTEGER) -> (result: INTEGER) { result = x + y }\nz = add(3, 4)";
+        let program =
+            "add = (x: INTEGER, y: INTEGER) -> (result: INTEGER) { result = x + y }\nz = add(3, 4)";
         execute(program).unwrap();
     }
 
